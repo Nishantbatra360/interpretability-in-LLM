@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Loader2, Play, Code, X } from 'lucide-react';
+import { Loader2, Play, Code, X, ShieldAlert } from 'lucide-react';
 import InterpretabilityHeatmap from './InterpretabilityHeatmap';
 import InterpretabilityPanel, { MethodologyBox, ComputedMetricsBox, TopTokenDriversBox, InterpretationSummaryBox } from './InterpretabilityPanel';
 import { AttributionBarChart } from './Charts';
+import api, { IS_DEMO } from '../api';
 
 const AVAILABLE_MODELS = [
   { id: 'meta/llama-3.1-8b-instruct', name: 'Llama 3.1 8B (Fastest)' },
@@ -23,21 +24,41 @@ const ClassificationPanel = ({ initialText = '' }) => {
   const [error, setError] = useState('');
   const [showDebug, setShowDebug] = useState(false);
 
+  // Demo Mode: Auto-load featured sample
+  useEffect(() => {
+    if (IS_DEMO && !initialText) {
+      const loadDemo = async () => {
+        try {
+          const res = await axios.get('/demo_data/deep_dive_sample.json');
+          setResult(res.data);
+          setText(res.data.text);
+        } catch (e) {
+          console.error("Failed to load deep dive demo", e);
+        }
+      };
+      loadDemo();
+    }
+  }, [initialText]);
+
   // Auto-run if text is passed from metrics tab
-  React.useEffect(() => {
+  useEffect(() => {
     if (initialText && initialText !== text) {
       setText(initialText);
     }
   }, [initialText]);
 
   // If text changes from props and we are on this tab, maybe we should auto-classify
-  React.useEffect(() => {
-    if (text && text === initialText && !result && !loading) {
+  useEffect(() => {
+    if (text && text === initialText && !result && !loading && !IS_DEMO) {
       handleClassify();
     }
   }, [text, initialText]);
 
   const handleClassify = async () => {
+    if (IS_DEMO) {
+      setError('Live inference is disabled in Demo Mode. Please explore the featured sample.');
+      return;
+    }
     if (!text.trim()) return;
     
     setLoading(true);
@@ -57,41 +78,51 @@ const ClassificationPanel = ({ initialText = '' }) => {
 
   return (
     <div className="dashboard-grid">
-      <div className="main-column">
+      <div className="main-column" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        
+        {IS_DEMO && (
+          <div style={{ 
+            padding: '12px 20px', backgroundColor: 'var(--primary-container)', 
+            color: 'var(--on-primary-container)', borderRadius: '12px', 
+            display: 'flex', alignItems: 'center', gap: '12px',
+            fontSize: '14px', fontWeight: '500', border: '1px solid rgba(0,0,0,0.1)'
+          }}>
+            <ShieldAlert size={18} />
+            <span><strong>Researcher Demo Mode:</strong> Viewing a pre-calculated high-resolution attribution map. Live inference is disabled.</span>
+          </div>
+        )}
+
         <div className="card">
-          <div className="card-header">
-            <h2>Input Data</h2>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h2>Input Data</h2>
+              <p style={{ color: 'var(--on-surface-variant)', fontSize: '14px', marginTop: '4px' }}>
+                Paste a comment here to evaluate its toxicity and view the model's reasoning...
+              </p>
+            </div>
+            {IS_DEMO && <span style={{ fontSize: '10px', fontWeight: '800', padding: '4px 8px', backgroundColor: 'var(--outline-variant)', borderRadius: '4px', color: 'var(--on-surface-variant)' }}>READ ONLY</span>}
           </div>
           
-          <div style={{ marginBottom: '20px', padding: '16px', backgroundColor: 'var(--surface-container-low)', borderRadius: '8px', borderLeft: '4px solid var(--tertiary)', fontSize: '13px', color: 'var(--on-surface)' }}>
-            <h3 style={{ margin: '0 0 8px 0', fontSize: '14px', color: 'var(--on-surface)' }}>Interpretability Deep-Dive (Single Comment)</h3>
-            <div style={{ fontWeight: '600', color: 'var(--primary)', marginBottom: '8px' }}>Focus: Token-Level Causality and "Why"</div>
-            <p style={{ margin: '0 0 8px 0', lineHeight: 1.5 }}>
-              <strong>What it is:</strong> This is a microscopic, highly granular analysis of exactly how the LLM arrived at its decision for a single specific comment.
-            </p>
-            <p style={{ margin: '0 0 8px 0', lineHeight: 1.5 }}>
-              <strong>How it works:</strong> Instead of just looking at the final "Toxic/Non-Toxic" label, the deep dive computes Explanation Signals. It breaks the sentence down word-by-word (token-by-token) to calculate the "attribution score" or "Net Logit Bias" of each word.
-            </p>
-            <p style={{ margin: 0, lineHeight: 1.5 }}>
-              <strong>The Goal:</strong> To understand <em>why</em> a model made a prediction. It produces visual heatmaps showing which specific words pulled the model's prediction toward "Toxic" (positive attribution) and which words pulled it toward "Non-Toxic" (negative attribution). The reference plan emphasizes this to check if the model's logic is actually trustworthy, not just mathematically correct on average.
-            </p>
-          </div>
-
-          <textarea
-            className="input-area"
+          <textarea 
+            className="form-control"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Paste a comment here to evaluate its toxicity and view the model's reasoning..."
+            placeholder="e.g. I disagree with this approach but I respect your opinion..."
+            style={{ minHeight: '140px', width: '100%', marginBottom: '16px' }}
+            disabled={IS_DEMO}
           />
-          <div style={{ display: 'flex', gap: '12px' }}>
+          
+          <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
             <button 
               className="btn btn-primary" 
               onClick={handleClassify}
-              disabled={loading || !text.trim()}
+              disabled={loading || !text.trim() || IS_DEMO}
+              style={{ gap: '8px', display: 'flex', alignItems: 'center' }}
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-              {loading ? 'Analyzing...' : 'Run Interpretability Deep-Dive'}
+              {loading ? 'Evaluating...' : 'Run Interpretability Deep-Dive'}
             </button>
+            
             {result && result.debug_data && (
               <button 
                 className="btn" 
@@ -104,155 +135,91 @@ const ClassificationPanel = ({ initialText = '' }) => {
           </div>
 
           {error && (
-            <div style={{ color: 'var(--error)', marginTop: '16px', fontSize: '14px' }}>
+            <div style={{ color: 'var(--error)', marginTop: '16px', fontSize: '14px', fontWeight: '500' }}>
               {error}
-            </div>
-          )}
-
-          {result && (
-            <div className={`prediction-box ${result.classification.toLowerCase()}`}>
-              <div className="prediction-header">
-                <span className="prediction-label">
-                  Prediction: {result.classification.toUpperCase()}
-                </span>
-                <span className="confidence-score">
-                  Confidence: {(result.confidence * 100).toFixed(1)}%
-                </span>
-              </div>
-              <p style={{ fontSize: '14px', color: 'var(--on-surface-variant)' }}>
-                Based on prompt-based relative probability (log p(toxic|x) - log p(non-toxic|x)).
-              </p>
             </div>
           )}
         </div>
 
-        {result && result.tokens && (
-          <div style={{ marginTop: '24px' }}>
-            <InterpretabilityHeatmap tokens={result.tokens} />
-          </div>
-        )}
-
-        {result && result.tokens && result.tokens.length > 0 && (
-          <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
-            {/* Row 1: Chart and Summary */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
-              <div className="card" style={{ padding: '20px', height: '100%' }}>
-                <AttributionBarChart tokens={result.tokens} />
+        {result && (
+          <div className={`prediction-box ${result.classification.toLowerCase()}`}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
+              <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
+                <div style={{ 
+                  width: '48px', height: '48px', borderRadius: '12px', 
+                  backgroundColor: result.classification === 'Toxic' ? 'rgba(186,26,26,0.1)' : 'rgba(0,108,75,0.1)',
+                  color: result.classification === 'Toxic' ? 'var(--toxic)' : 'var(--non-toxic)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center'
+                }}>
+                  {result.classification === 'Toxic' ? <ShieldAlert size={28} /> : <ShieldCheck size={28} />}
+                </div>
+                <div>
+                  <div style={{ fontSize: '12px', textTransform: 'uppercase', fontWeight: '800', color: 'var(--on-surface-variant)' }}>Model Verdict</div>
+                  <div style={{ fontSize: '24px', fontWeight: '800' }}>{result.classification}</div>
+                </div>
               </div>
-              <InterpretationSummaryBox 
-                tokens={result.tokens}
-                confidence={result.confidence}
-                classification={result.classification}
-              />
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '12px', textTransform: 'uppercase', fontWeight: '800', color: 'var(--on-surface-variant)' }}>Confidence</div>
+                <div style={{ fontSize: '24px', fontWeight: '800', color: 'var(--primary)' }}>{(result.confidence * 100).toFixed(1)}%</div>
+              </div>
             </div>
 
-            {/* Row 2: Top Drivers */}
-            <TopTokenDriversBox tokens={result.tokens} />
-
-            {/* Row 3: Computed Metrics */}
-            <ComputedMetricsBox 
-              tokens={result.tokens}
-              confidence={result.confidence}
-              classification={result.classification}
-            />
+            <div style={{ backgroundColor: 'var(--surface)', padding: '24px', borderRadius: '12px', border: '1px solid var(--outline-variant)' }}>
+              <div style={{ fontSize: '13px', fontWeight: '700', color: 'var(--on-surface-variant)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Sparkles size={16} style={{ color: 'var(--primary)' }} /> Visual Heatmap: Feature Attribution
+              </div>
+              <InterpretabilityHeatmap tokens={result.tokens} />
+            </div>
+            
+            <div style={{ marginTop: '24px' }}>
+              <InterpretabilityPanel 
+                tokens={result.tokens} 
+                confidence={result.confidence} 
+                classification={result.classification} 
+              />
+            </div>
           </div>
         )}
       </div>
-      
+
       <div className="side-column">
-        <div className="card" style={{ marginBottom: '24px' }}>
+        <div className="card">
           <div className="card-header">
+            <h2>Parameters</h2>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '8px', color: 'var(--on-surface-variant)' }}>Model</label>
-              <select 
-                value={model} 
-                onChange={(e) => setModel(e.target.value)}
-                style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--outline-variant)', marginBottom: '16px' }}
-              >
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '8px', color: 'var(--on-surface-variant)' }}>Target LLM</label>
+              <select className="btn" style={{ width: '100%', textAlign: 'left', border: '1px solid var(--outline-variant)' }} value={model} onChange={(e) => setModel(e.target.value)} disabled={IS_DEMO}>
                 {AVAILABLE_MODELS.map(m => (
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
               </select>
             </div>
             <div>
-              <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '8px', color: 'var(--on-surface-variant)' }}>Explanation Method</label>
-              <select style={{ width: '100%', padding: '8px', borderRadius: '4px', border: '1px solid var(--outline-variant)' }}>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '8px', color: 'var(--on-surface-variant)' }}>Explanation Method</label>
+              <select className="btn" style={{ width: '100%', textAlign: 'left', border: '1px solid var(--outline-variant)' }} disabled={IS_DEMO}>
                 <option>Simulated Attention (JSON)</option>
+                <option>Causal Perturbation (Future)</option>
               </select>
             </div>
-            
-            {result && result.examples_used && result.examples_used.length > 0 && (
-              <div style={{ marginTop: '16px', borderTop: '1px solid var(--outline-variant)', paddingTop: '16px' }}>
-                <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '12px', color: 'var(--on-surface-variant)' }}>
-                   Few-Shot Context (from DB)
-                </label>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {result.examples_used.map((ex, idx) => (
-                    <div key={idx} style={{ padding: '8px', backgroundColor: 'var(--surface-container)', borderRadius: '4px', fontSize: '12px', borderLeft: `3px solid ${ex.label === 'Toxic' ? 'var(--toxic)' : 'var(--non-toxic)'}` }}>
-                      <span style={{ fontWeight: 'bold', display: 'block', marginBottom: '4px' }}>{ex.label}</span>
-                      <span style={{ color: 'var(--on-surface-variant)' }}>"{ex.text.length > 80 ? ex.text.substring(0, 80) + '...' : ex.text}"</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
-
+        
         <MethodologyBox />
       </div>
-      
-      {/* Raw API Request/Response Modal */}
-      {showDebug && result && result.debug_data && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setShowDebug(false)}>
-          <div style={{ backgroundColor: 'var(--surface)', padding: '24px', borderRadius: '8px', width: '85%', maxWidth: '900px', maxHeight: '85vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <h2 style={{ margin: 0, fontSize: '18px' }}>Deep-Dive API Diagnostic Data</h2>
-              <button onClick={() => setShowDebug(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--on-surface-variant)' }}><X size={20} /></button>
-            </div>
-            
-            <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '24px', paddingRight: '8px' }}>
-              <div style={{ backgroundColor: 'var(--surface-container-low)', padding: '16px', borderRadius: '6px', borderLeft: '4px solid var(--primary)' }}>
-                <h3 style={{ fontSize: '15px', color: 'var(--primary)', marginBottom: '12px', marginTop: 0 }}>1. Zero-Shot Logprob Extraction (Verdict)</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--on-surface-variant)', marginBottom: '4px' }}>PROMPT SENT:</div>
-                    <pre style={{ backgroundColor: '#1e1e1e', color: '#d4d4d4', padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap', fontSize: '12px', fontFamily: 'var(--font-mono)', margin: 0 }}>
-                      {result.debug_data.zero_shot_prompt || 'N/A'}
-                    </pre>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--on-surface-variant)', marginBottom: '4px' }}>RAW LLM RESPONSE:</div>
-                    <pre style={{ backgroundColor: '#1e1e1e', color: '#00ff88', padding: '12px', borderRadius: '4px', fontSize: '16px', fontFamily: 'var(--font-mono)', margin: 0 }}>
-                      {result.debug_data.zero_shot_raw_response || 'N/A'}
-                    </pre>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--on-surface-variant)', marginBottom: '4px' }}>LOGPROBS (USED FOR MATHEMATICAL SCORING):</div>
-                    <pre style={{ backgroundColor: '#1e1e1e', color: '#d4d4d4', padding: '12px', borderRadius: '4px', overflowX: 'auto', fontSize: '12px', fontFamily: 'var(--font-mono)', margin: 0 }}>
-                      {JSON.stringify(result.debug_data.zero_shot_logprobs, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              </div>
 
-              <div style={{ backgroundColor: 'var(--surface-container-low)', padding: '16px', borderRadius: '6px', borderLeft: '4px solid var(--secondary)' }}>
-                <h3 style={{ fontSize: '15px', color: 'var(--secondary)', marginBottom: '12px', marginTop: 0 }}>2. Generative Token Attribution (Heatmaps)</h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--on-surface-variant)', marginBottom: '4px' }}>PROMPT SENT:</div>
-                    <pre style={{ backgroundColor: '#1e1e1e', color: '#d4d4d4', padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap', fontSize: '12px', fontFamily: 'var(--font-mono)', margin: 0, maxHeight: '200px', overflowY: 'auto' }}>
-                      {result.debug_data.deep_dive_prompt || 'N/A'}
-                    </pre>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '12px', fontWeight: 'bold', color: 'var(--on-surface-variant)', marginBottom: '4px' }}>RAW JSON RECEIVED:</div>
-                    <pre style={{ backgroundColor: '#1e1e1e', color: '#d4d4d4', padding: '12px', borderRadius: '4px', whiteSpace: 'pre-wrap', fontSize: '12px', fontFamily: 'var(--font-mono)', margin: 0, maxHeight: '200px', overflowY: 'auto' }}>
-                      {result.debug_data.deep_dive_raw_response || 'N/A'}
-                    </pre>
-                  </div>
-                </div>
-              </div>
+      {showDebug && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px' }}>
+          <div className="card" style={{ maxWidth: '900px', width: '100%', maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ margin: 0 }}>Raw LLM Interpretation Data</h2>
+              <button className="btn" onClick={() => setShowDebug(false)} style={{ minWidth: 0, padding: '8px' }}>
+                <X size={20} />
+              </button>
+            </div>
+            <div style={{ padding: '24px', overflowY: 'auto', backgroundColor: '#1e1e1e', color: '#d4d4d4', fontFamily: 'var(--font-mono)', fontSize: '13px' }}>
+              <pre>{JSON.stringify(result, null, 2)}</pre>
             </div>
           </div>
         </div>

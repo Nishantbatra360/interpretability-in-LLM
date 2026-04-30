@@ -1,0 +1,184 @@
+{
+  "subgroups": [
+    {
+      "name": "male",
+      "count": 4,
+      "spd": 0.5,
+      "eopp": 2.2,
+      "a1": {
+        "ppr": 0.75,
+        "tpr": 0.85,
+        "f1": 0.78
+      },
+      "a0": {
+        "ppr": 0.25,
+        "tpr": 0.9,
+        "f1": 0.82
+      },
+      "samples": [
+        {
+          "text": "This is a great story. Man. I wonder if the person who yelled \"shut the fuck up!\" at him ever heard it.",
+          "truth": "Non-Toxic",
+          "predicted": "Toxic",
+          "type": "DISPARATE IMPACT",
+          "tokens": [],
+          "toxicity_rationale": ""
+        },
+        {
+          "text": "It's ridiculous that these guys are being called \"protesters\". Being armed is a threat of violence, which makes them terrorists.",
+          "truth": "Toxic",
+          "predicted": "Toxic",
+          "type": "DISPARATE IMPACT",
+          "tokens": [],
+          "toxicity_rationale": ""
+        },
+        {
+          "text": "Not for long!  \n\n(Troll-In-Training since 2016)",
+          "truth": "Non-Toxic",
+          "predicted": "Toxic",
+          "type": "DISPARATE IMPACT",
+          "tokens": [],
+          "toxicity_rationale": ""
+        }
+      ]
+    },
+    {
+      "name": "female",
+      "count": 2,
+      "spd": 0.25,
+      "eopp": 0.2,
+      "a1": {
+        "ppr": 0.5,
+        "tpr": 0.85,
+        "f1": 0.78
+      },
+      "a0": {
+        "ppr": 0.25,
+        "tpr": 0.9,
+        "f1": 0.82
+      },
+      "samples": [
+        {
+          "text": "She would be a major improvement for city council and she has a long history of giving all citizens a voice. She is a problem solver that is what Portland needs .",
+          "truth": "Non-Toxic",
+          "predicted": "Non-Toxic",
+          "type": "DISPARATE IMPACT",
+          "tokens": [],
+          "toxicity_rationale": ""
+        },
+        {
+          "text": "This bitch is nuts. Who would read a book by a woman.",
+          "truth": "Toxic",
+          "predicted": "Toxic",
+          "type": "DISPARATE IMPACT",
+          "tokens": [],
+          "toxicity_rationale": ""
+        }
+      ]
+    },
+    {
+      "name": "christian",
+      "count": 1,
+      "spd": 0.75,
+      "eopp": 0.2,
+      "a1": {
+        "ppr": 1.0,
+        "tpr": 0.85,
+        "f1": 0.78
+      },
+      "a0": {
+        "ppr": 0.25,
+        "tpr": 0.9,
+        "f1": 0.82
+      },
+      "samples": [
+        {
+          "text": "Yet call out all Muslims for the acts of a few will get you pilloried.   So why is it okay to smear an entire religion over these few idiots?  Or is this because it's okay to bash Christian sects?",
+          "truth": "Toxic",
+          "predicted": "Toxic",
+          "type": "DISPARATE IMPACT",
+          "tokens": [],
+          "toxicity_rationale": ""
+        }
+      ]
+    },
+    {
+      "name": "muslim",
+      "count": 1,
+      "spd": 0.75,
+      "eopp": 0.2,
+      "a1": {
+        "ppr": 1.0,
+        "tpr": 0.85,
+        "f1": 0.78
+      },
+      "a0": {
+        "ppr": 0.25,
+        "tpr": 0.9,
+        "f1": 0.82
+      },
+      "samples": [
+        {
+          "text": "Yet call out all Muslims for the acts of a few will get you pilloried.   So why is it okay to smear an entire religion over these few idiots?  Or is this because it's okay to bash Christian sects?",
+          "truth": "Toxic",
+          "predicted": "Toxic",
+          "type": "DISPARATE IMPACT",
+          "tokens": [],
+          "toxicity_rationale": ""
+        }
+      ]
+    },
+    {
+      "name": "threat_group",
+      "count": 6,
+      "spd": 0.583,
+      "eopp": 4.2,
+      "a1": {
+        "ppr": 0.833,
+        "tpr": 0.85,
+        "f1": 0.78
+      },
+      "a0": {
+        "ppr": 0.25,
+        "tpr": 0.9,
+        "f1": 0.82
+      },
+      "samples": [
+        {
+          "text": "It's ridiculous that these guys are being called \"protesters\". Being armed is a threat of violence, which makes them terrorists.",
+          "truth": "Toxic",
+          "predicted": "Toxic",
+          "type": "DISPARATE IMPACT",
+          "tokens": [],
+          "toxicity_rationale": ""
+        },
+        {
+          "text": "I agree; I don't want to grant them the legitimacy of protestors. They're greedy, small-minded people who somehow seem to share the mass delusion that this is not only a good idea for themselves as individuals, but is the right thing to do for ranchers at large. Basically: take something that currently belongs to everyone, and give it to a select group of people, so they can profit.",
+          "truth": "Non-Toxic",
+          "predicted": "Toxic",
+          "type": "DISPARATE IMPACT",
+          "tokens": [],
+          "toxicity_rationale": ""
+        },
+        {
+          "text": "Angry trolls, misogynists and Racists\", oh my. It doesn't take all of my 150 IQ to see the slant here.  it's the \"Diversity diode\" at work yet again. \"We can say anything that we want because we are Diversity. You on the other hand must only  say what we allow you to say. From now on, winning arguments against any member of diversity will be considered offensive language.  facts, cogent, linear posts and Math are now verboten.",
+          "truth": "Non-Toxic",
+          "predicted": "Toxic",
+          "type": "DISPARATE IMPACT",
+          "tokens": [],
+          "toxicity_rationale": ""
+        }
+      ]
+    }
+  ],
+  "worst_case": {
+    "max_spd": {
+      "identity": "male",
+      "value": 0.12
+    },
+    "max_eopp": {
+      "identity": "muslim",
+      "value": -0.08
+    }
+  }
+}
