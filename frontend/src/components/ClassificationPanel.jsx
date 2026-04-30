@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Loader2, Play, Code, X, ShieldAlert } from 'lucide-react';
+import { Loader2, Play, Code, X, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-react';
 import InterpretabilityHeatmap from './InterpretabilityHeatmap';
 import InterpretabilityPanel, { MethodologyBox, ComputedMetricsBox, TopTokenDriversBox, InterpretationSummaryBox } from './InterpretabilityPanel';
 import { AttributionBarChart } from './Charts';
