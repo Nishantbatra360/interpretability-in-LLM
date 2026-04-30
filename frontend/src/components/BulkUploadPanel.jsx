@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { UploadCloud, Play, Loader2, Database, Trash2, Code, X } from 'lucide-react';
+import { UploadCloud, Play, Loader2, Database, Trash2, Code, X, ShieldAlert } from 'lucide-react';
 import InterpretabilityHeatmap from './InterpretabilityHeatmap';
 import InterpretabilityPanel from './InterpretabilityPanel';
 import { PredictionDonut, ConfidenceHistogram, TokenHeatmap } from './Charts';
+import api, { IS_DEMO } from '../api';
+import axios from 'axios';
 
 const AVAILABLE_MODELS = [
   { id: 'meta/llama-3.1-8b-instruct', name: 'Llama 3.1 8B (Fastest)' },
@@ -60,11 +61,11 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
 
   const fetchFiles = async () => {
     try {
-      const res = await axios.get('http://127.0.0.1:8004/files');
-      setFilesList(res.data);
-      if (res.data.length > 0 && selectedFileId === null) {
-        setSelectedFileId(res.data[0].id);
-      } else if (res.data.length === 0) {
+      const data = await api.getFiles();
+      setFilesList(data);
+      if (data.length > 0 && selectedFileId === null) {
+        setSelectedFileId(data[0].id);
+      } else if (data.length === 0) {
         setSelectedFileId(null);
         setDbStatus({ pending: 0, evaluated: 0 });
         setEvaluatedComments([]);
@@ -77,11 +78,10 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
   const fetchStatus = async () => {
     if (!selectedFileId) return;
     try {
-      // Single request replaces /db-status + /evaluated-comments
-      const res = await axios.get(`http://127.0.0.1:8004/file-state/${selectedFileId}`);
-      setDbStatus({ pending: res.data.pending, evaluated: res.data.evaluated });
-      setEvaluatedComments(res.data.comments || []);
-      setGlobalStats(res.data.stats || null);
+      const data = await api.getFileState(selectedFileId);
+      setDbStatus({ pending: data.pending, evaluated: data.evaluated });
+      setEvaluatedComments(data.comments || []);
+      setGlobalStats(data.stats || null);
     } catch (e) {
       console.error(e);
     }
@@ -99,6 +99,10 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
 
 
   const handleUpload = async () => {
+    if (IS_DEMO) {
+      setMessage('Demo Mode: Uploading is disabled in this preview.');
+      return;
+    }
     if (!file) return;
     setUploading(true);
     setMessage('');
@@ -107,20 +111,22 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
     formData.append('file', file);
 
     try {
-      const res = await axios.post('http://127.0.0.1:8004/upload-csv', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setMessage(res.data.message);
+      await api.uploadFile(formData);
+      setMessage("File uploaded successfully.");
       setFile(null);
       await fetchFiles();
     } catch (err) {
-      setMessage('Upload failed: ' + (err.response?.data?.detail || err.message));
+      setMessage('Upload failed: ' + err.message);
     } finally {
       setUploading(false);
     }
   };
 
   const handleEvaluate = () => {
+    if (IS_DEMO) {
+      setMessage('Demo Mode: Live LLM evaluation is disabled. Use existing data below.');
+      return;
+    }
     if (!selectedFileId || isEvaluating) return;
     
     setIsEvaluating(true);
@@ -170,8 +176,12 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
   };
   
   const handleDeleteFile = async (id) => {
+    if (IS_DEMO) {
+      setMessage('Demo Mode: Deletion is disabled in this preview.');
+      return;
+    }
     try {
-      await axios.delete(`http://127.0.0.1:8004/files/${id}`);
+      await api.deleteFile(id);
       if (selectedFileId === id) setSelectedFileId(null);
       fetchFiles();
     } catch (err) {
@@ -182,15 +192,30 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
   return (
     <>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+        {IS_DEMO && (
+          <div style={{ 
+            padding: '12px 20px', backgroundColor: 'var(--primary-container)', 
+            color: 'var(--on-primary-container)', borderRadius: '12px', 
+            display: 'flex', alignItems: 'center', gap: '12px',
+            fontSize: '14px', fontWeight: '500', border: '1px solid rgba(0,0,0,0.1)'
+          }}>
+            <ShieldAlert size={18} />
+            <span><strong>Researcher Demo Mode:</strong> You are viewing a static snapshot of the audit results. Actions like file upload and live LLM evaluation are disabled.</span>
+          </div>
+        )}
+
         <div className="dashboard-grid">
         <div className="main-column" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
         
         <div className="card">
-          <div className="card-header">
-            <h2>CSV Data Ingestion</h2>
-            <p style={{ color: 'var(--on-surface-variant)', fontSize: '14px', marginTop: '4px' }}>
-              Upload the Civil Comments CSV dataset. Data will be queued for evaluation.
-            </p>
+          <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div>
+              <h2>CSV Data Ingestion</h2>
+              <p style={{ color: 'var(--on-surface-variant)', fontSize: '14px', marginTop: '4px' }}>
+                Upload the Civil Comments CSV dataset. Data will be queued for evaluation.
+              </p>
+            </div>
+            {IS_DEMO && <span style={{ fontSize: '10px', fontWeight: '800', padding: '4px 8px', backgroundColor: 'var(--outline-variant)', borderRadius: '4px', color: 'var(--on-surface-variant)' }}>READ ONLY</span>}
           </div>
           
           <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
@@ -199,11 +224,12 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
               accept=".csv" 
               onChange={(e) => setFile(e.target.files[0])}
               style={{ padding: '8px', border: '1px dashed var(--outline-variant)', flex: 1, borderRadius: '4px' }}
+              disabled={IS_DEMO}
             />
             <button 
               className="btn btn-primary" 
               onClick={handleUpload}
-              disabled={!file || uploading}
+              disabled={!file || uploading || IS_DEMO}
             >
               {uploading ? <Loader2 size={16} className="animate-spin" /> : <UploadCloud size={16} />}
               {uploading ? 'Uploading...' : 'Upload to Database'}
@@ -219,7 +245,7 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
             </div>
           )}
           
-          {message && !uploading && !isEvaluating && <div style={{ marginTop: '16px', fontSize: '14px', color: 'var(--primary)' }}>{message}</div>}
+          {message && !uploading && !isEvaluating && <div style={{ marginTop: '16px', fontSize: '14px', color: 'var(--primary)', fontWeight: '500' }}>{message}</div>}
         </div>
 
         {selectedFileId && (

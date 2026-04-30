@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import axios from 'axios';
 import { 
   Download, RefreshCw, AlertTriangle, CheckCircle, Info, 
   ChevronDown, ChevronUp, ExternalLink, ShieldCheck, 
   TrendingUp, TrendingDown, Target, Database, Activity, AlertCircle 
 } from 'lucide-react';
 import { SPDEOppChart, TokenHeatmap } from './Charts';
+import api, { IS_DEMO } from '../api';
+import axios from 'axios';
 
 /* ─── helpers ──────────────────────────────────────────── */
 const pct = (v) => (v * 100).toFixed(1) + '%';
@@ -156,9 +157,9 @@ const FairnessMetrics = () => {
 
   const fetchFiles = async () => {
     try {
-      const res = await axios.get('http://127.0.0.1:8004/files');
-      setFiles(res.data);
-      if (res.data.length > 0 && !selectedFileId) setSelectedFileId(res.data[0].id.toString());
+      const data = await api.getFiles();
+      setFiles(data);
+      if (data.length > 0 && !selectedFileId) setSelectedFileId(data[0].id.toString());
     } catch (e) { console.error(e); }
   };
 
@@ -166,8 +167,8 @@ const FairnessMetrics = () => {
     if (!selectedFileId) return;
     setLoading(true);
     try {
-      const res = await axios.get(`http://127.0.0.1:8004/metrics?file_id=${selectedFileId}`);
-      setMetrics(res.data);
+      const data = await api.getMetrics(selectedFileId);
+      setMetrics(data);
     } catch (e) {
       console.error(e);
       setMetrics(null);
@@ -180,6 +181,7 @@ const FairnessMetrics = () => {
   useEffect(() => { if (selectedFileId) fetchMetrics(); }, [selectedFileId, fetchMetrics]);
 
   const handleSyncFromLogs = async () => {
+    if (IS_DEMO) return;
     if (!selectedFileId) return;
     setLoading(true);
     try {
@@ -228,17 +230,31 @@ const FairnessMetrics = () => {
       {/* Header & Controls */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
-            <h1 style={{ fontSize: '28px', fontWeight: '800', marginBottom: '8px' }}>Subgroup Fairness Audit</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
+              <h1 style={{ fontSize: '28px', fontWeight: '800', margin: 0 }}>Subgroup Fairness Audit</h1>
+              {IS_DEMO && <span style={{ fontSize: '10px', fontWeight: '800', padding: '4px 8px', backgroundColor: 'var(--outline-variant)', borderRadius: '4px', color: 'var(--on-surface-variant)' }}>READ ONLY</span>}
+            </div>
             <p style={{ color: 'var(--on-surface-variant)', fontSize: '15px' }}>Focused Analysis: Gender, Religion &amp; Threat (Audit Logs).</p>
         </div>
         <div style={{ display: 'flex', gap: '12px' }}>
             <select className="btn" value={selectedFileId} onChange={(e) => setSelectedFileId(e.target.value)} style={{ border: '1px solid var(--outline-variant)', paddingRight: '32px' }}>
                 {files.map(f => <option key={f.id} value={f.id}>{f.filename}</option>)}
             </select>
-            <button className="btn" onClick={handleSyncFromLogs} title="Refresh identities from stored LLM logs" style={{ border: '1px solid var(--outline-variant)', gap: '8px', display: 'flex' }}>
+            <button 
+                className="btn" 
+                onClick={handleSyncFromLogs} 
+                title="Refresh identities from stored LLM logs" 
+                style={{ border: '1px solid var(--outline-variant)', gap: '8px', display: 'flex' }}
+                disabled={IS_DEMO}
+            >
                 <Database size={14} /> Sync from Logs
             </button>
-            <button className="btn btn-primary" onClick={fetchMetrics} style={{ gap: '8px', display: 'flex' }}>
+            <button 
+                className="btn btn-primary" 
+                onClick={fetchMetrics} 
+                style={{ gap: '8px', display: 'flex' }}
+                disabled={IS_DEMO}
+            >
                 <RefreshCw size={14} /> Recalculate
             </button>
         </div>
