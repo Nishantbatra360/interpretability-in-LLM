@@ -96,13 +96,19 @@ const AttributionBarChart = ({ tokens }) => {
 /**
  * PredictionDonut — shows Toxic vs Non-Toxic split as an SVG donut chart.
  */
-const PredictionDonut = ({ comments }) => {
+const PredictionDonut = ({ comments, stats }) => {
   const counts = useMemo(() => {
+    if (stats) {
+      return { 
+        toxic: stats.toxic, 
+        nonToxic: stats.non_toxic, 
+        total: stats.total 
+      };
+    }
     const toxic = comments.filter(c => c.predicted_classification === 'Toxic').length;
     const nonToxic = comments.filter(c => c.predicted_classification === 'Non-Toxic').length;
-    const unknown = comments.length - toxic - nonToxic;
-    return { toxic, nonToxic, unknown, total: comments.length };
-  }, [comments]);
+    return { toxic, nonToxic, total: comments.length };
+  }, [comments, stats]);
 
   if (counts.total === 0) return null;
 
@@ -181,8 +187,10 @@ const PredictionDonut = ({ comments }) => {
 /**
  * ConfidenceHistogram — distribution of confidence scores in 10% buckets.
  */
-const ConfidenceHistogram = ({ comments }) => {
+const ConfidenceHistogram = ({ comments, stats }) => {
   const buckets = useMemo(() => {
+    if (stats?.confidence_bins) return stats.confidence_bins;
+    
     const b = Array(10).fill(0);
     comments.forEach(c => {
       if (c.confidence != null) {
@@ -191,7 +199,7 @@ const ConfidenceHistogram = ({ comments }) => {
       }
     });
     return b;
-  }, [comments]);
+  }, [comments, stats]);
 
   const maxCount = Math.max(...buckets, 1);
   const MAX_BAR_H = 80;
@@ -329,4 +337,73 @@ const SPDEOppChart = ({ identities }) => {
   );
 };
 
-export { AttributionBarChart, PredictionDonut, ConfidenceHistogram, SPDEOppChart };
+/**
+ * TokenHeatmap — visualizes word-level attribution scores mapped onto original text.
+ * Red = Toxic pull, Green = Safe pull.
+ */
+const TokenHeatmap = ({ tokens, fullText }) => {
+  if (!fullText) return null;
+  
+  // Clean tokens for easier matching
+  const tokenMap = (tokens || []).reduce((acc, t) => {
+    acc[t.token.toLowerCase()] = t.attribution;
+    return acc;
+  }, {});
+
+  // Split original text into words/tokens
+  const words = fullText.split(/(\s+)/); // Keep whitespace
+  
+  return (
+    <div style={{ 
+      padding: '12px', 
+      backgroundColor: 'var(--surface-container-lowest)', borderRadius: '6px',
+      border: '1px solid var(--outline-variant)', marginTop: '8px',
+      lineHeight: 1.8,
+      whiteSpace: 'pre-wrap',
+      textAlign: 'left'
+    }}>
+      {words.map((w, i) => {
+        if (w.trim() === '') return <span key={i}>{w}</span>;
+
+        // Clean the word for matching (remove punctuation)
+        const cleanW = w.toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g,"");
+        
+        // Find match in token map
+        let attribution = 0;
+        if (tokenMap[cleanW]) {
+          attribution = tokenMap[cleanW];
+        } else {
+          // Try partial matches
+          const matchKey = Object.keys(tokenMap).find(k => k.includes(cleanW) || cleanW.includes(k));
+          if (matchKey) attribution = tokenMap[matchKey];
+        }
+
+        const abs = Math.abs(attribution);
+        const opacity = Math.min(abs * 0.8 + 0.05, 0.9);
+        const color = attribution > 0 
+          ? `rgba(186, 26, 26, ${opacity})` // Toxic Red
+          : attribution < 0 
+            ? `rgba(0, 108, 75, ${opacity})`  // Non-Toxic Green
+            : 'transparent';
+        
+        return (
+          <span key={i} 
+            className="token"
+            data-tooltip={attribution !== 0 ? `Weight: ${attribution.toFixed(3)}` : undefined}
+            style={{
+              backgroundColor: color,
+              color: attribution !== 0 && opacity > 0.5 ? 'white' : 'var(--on-surface)',
+              fontWeight: attribution !== 0 ? '700' : '400',
+              display: 'inline',
+              whiteSpace: 'pre-wrap',
+              borderBottom: attribution !== 0 ? `2px solid ${color}` : 'none'
+            }}>
+            {w}
+          </span>
+        );
+      })}
+    </div>
+  );
+};
+
+export { AttributionBarChart, PredictionDonut, ConfidenceHistogram, SPDEOppChart, TokenHeatmap };

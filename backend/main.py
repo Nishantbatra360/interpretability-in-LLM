@@ -131,18 +131,51 @@ def get_file_state(file_id: int, db: Session = Depends(get_db)):
     cache_key = f"file-state:{file_id}"
     cached = cache_get(cache_key)
     if cached is not None: return cached
+    file = db.query(UploadedFile).filter(UploadedFile.id == file_id).first()
+    if not file: return {"error": "File not found"}
 
     row = db.query(
         func.sum((CommentEvaluation.status == "pending").cast(Integer)).label("pending"),
-        func.sum((CommentEvaluation.status == "evaluated").cast(Integer)).label("evaluated")
+        func.sum((CommentEvaluation.status == "evaluated").cast(Integer)).label("evaluated"),
+        func.count(CommentEvaluation.id).label("total")
     ).filter(CommentEvaluation.file_id == file_id).one()
 
-    pending = int(row.pending or 0)
+    pending_count = int(row.pending or 0)
     evaluated_count = int(row.evaluated or 0)
+    total_count = int(row.total or 0)
 
     comments = []
+    stats = {"toxic": 0, "non_toxic": 0, "total": evaluated_count, "confidence_bins": [0]*10}
+    # Refined auto-reset: only target truly empty responses (API failures)
+    all_evaluated = db.query(CommentEvaluation).filter(
+        CommentEvaluation.file_id == file_id,
+        CommentEvaluation.status == "evaluated"
+    ).all()
+    
+    ghosts = [g for g in all_evaluated if (
+        not g.tokens_json or 
+        '"raw_response": ""' in g.tokens_json
+    )]
+    
+    if ghosts:
+        for g in ghosts: g.status = "pending"
+        db.commit()
+        # Invalidate caches to reflect the reset
+        cache_invalidate_prefix(f"file-state:{file_id}")
+        cache_invalidate_prefix(f"evaluated-comments:{file_id}")
+        cache_invalidate_prefix(f"metrics:{file_id}")
+
     if evaluated_count > 0:
-        rows = db.query(CommentEvaluation).filter(CommentEvaluation.file_id == file_id, CommentEvaluation.status == "evaluated").limit(100).all()
+        stats["toxic"] = db.query(CommentEvaluation).filter(CommentEvaluation.file_id == file_id, CommentEvaluation.status == "evaluated", CommentEvaluation.predicted_classification == "Toxic").count()
+        stats["non_toxic"] = evaluated_count - stats["toxic"]
+        
+        all_conf = db.query(CommentEvaluation.confidence).filter(CommentEvaluation.file_id == file_id, CommentEvaluation.status == "evaluated").all()
+        for (c,) in all_conf:
+            if c is not None:
+                idx = min(int(c * 10), 9)
+                stats["confidence_bins"][idx] += 1
+
+        rows = db.query(CommentEvaluation).filter(CommentEvaluation.file_id == file_id, CommentEvaluation.status == "evaluated").order_by(CommentEvaluation.id.desc()).limit(100).all()
         comments = [{
             "id": c.id, "text": c.text, "predicted_classification": c.predicted_classification,
             "confidence": c.confidence, "tokens_json": c.tokens_json, "target": c.target,
@@ -151,7 +184,11 @@ def get_file_state(file_id: int, db: Session = Depends(get_db)):
             "identity_prompt": c.identity_prompt, "identity_response": c.identity_response
         } for c in rows]
 
-    result = {"pending": pending, "evaluated": evaluated_count, "comments": comments}
+    result = {
+        "id": file.id, "filename": file.filename, "total": total_count,
+        "pending": pending_count, "evaluated": evaluated_count,
+        "comments": comments, "stats": stats
+    }
     cache_set(cache_key, result)
     return result
 
@@ -221,8 +258,27 @@ Text: "{text}"
     return "Non-Toxic", 0.0, {"rationale": "Error", "tokens": []}
 
 async def unified_inference_async(client: httpx.AsyncClient, text: str, model: str = "meta/llama-3.1-8b-instruct"):
-    identities = ["male", "female", "black", "white", "asian", "latino", "christian", "jewish", "muslim", "psychiatric_or_mental_illness", "identity_caste_religion", "gender_based", "threat_group"]
-    prompt = f"Task: Analyze comment for toxicity and identity. Return JSON with 'toxicity' (Toxic/Non-Toxic), 'confidence' (0-1), 'detections' (object with 0/1 for {identities}), 'rationale', 'identity_rationale'. Comment: {text}"
+    identities = ["male", "female", "christian", "jewish", "muslim", "threat_group"]
+    prompt = f"""Task: Perform a high-fidelity audit of the following text for toxicity and protected identities.
+Output MUST be a valid JSON object.
+
+Detections Object (Map to 0 or 1):
+- Gender: male, female
+- Religion: christian, jewish, muslim
+- Threat: threat_group (Mentions of extremism or violence)
+
+Output JSON Schema:
+{{
+  "toxicity": "Toxic" or "Non-Toxic",
+  "confidence": Float (0-1),
+  "detections": {{ "male": 0, "female": 0, "christian": 0, "jewish": 0, "muslim": 0, "threat_group": 0 }},
+  "toxicity_rationale": "Why is it toxic/safe?",
+  "identity_rationale": "Why are these identities detected?",
+  "tokens": [ {{ "token": "word", "attribution": Float }} ] 
+}}
+
+Text: "{text}"
+JSON:"""
     try:
         headers = {"Authorization": f"Bearer {NVIDIA_NIM_API_KEY}", "Content-Type": "application/json"}
         payload = {"model": model, "messages": [{"role": "user", "content": prompt}], "temperature": 0.1, "max_tokens": 800, "response_format": {"type": "json_object"}}
@@ -261,30 +317,32 @@ async def stream_evaluate(file_id: int, batch_size: int = 10, model: str = "meta
                 async with semaphore:
                     res, prompt, raw_res = await unified_inference_async(client, c.text, model)
                     
-                    # Core classification results
-                    c.predicted_classification = res["toxicity"]
-                    c.confidence = res["confidence"]
-                    c.toxicity_rationale = res["toxicity_rationale"]
-                    c.identity_rationale = res["identity_rationale"]
-                    c.identity_response = raw_res
-                    c.identity_prompt = prompt
-                    c.status = "evaluated"
-                    
-                    # Persist identity detections for Fairness Metrics
-                    for ident, val in res.get("detections", {}).items():
-                        if hasattr(c, ident):
-                            setattr(c, ident, float(val))
-                    
-                    c.tokens_json = json.dumps({
-                        "rationale": res["toxicity_rationale"], 
-                        "prompt": prompt, 
-                        "raw_response": raw_res
-                    })
-                    
-                    db.commit()
-                    cache_invalidate_prefix(f"file-state:{file_id}")
-                    cache_invalidate_prefix(f"evaluated-comments:{file_id}")
-                    cache_invalidate_prefix(f"metrics:{file_id}")
+                    if res is not None:
+                        # Core classification results
+                        c.predicted_classification = res["toxicity"]
+                        c.confidence = res["confidence"]
+                        c.toxicity_rationale = res["toxicity_rationale"]
+                        c.identity_rationale = res["identity_rationale"]
+                        c.identity_response = raw_res
+                        c.identity_prompt = prompt
+                        c.status = "evaluated"
+                        
+                        # Persist identity detections for Fairness Metrics
+                        for ident, val in res.get("detections", {}).items():
+                            if hasattr(c, ident):
+                                setattr(c, ident, float(val))
+                        
+                        c.tokens_json = json.dumps({
+                            "toxicity_rationale": res["toxicity_rationale"], 
+                            "prompt": prompt, 
+                            "raw_response": raw_res,
+                            "tokens": res.get("tokens", [])
+                        })
+                        
+                        db.commit()
+                        cache_invalidate_prefix(f"file-state:{file_id}")
+                        cache_invalidate_prefix(f"evaluated-comments:{file_id}")
+                        cache_invalidate_prefix(f"metrics:{file_id}")
                     processed += 1
             tasks = [run_one(c) for c in pending]
             for coro in asyncio.as_completed(tasks): await coro; yield f"data: {json.dumps({'type': 'progress', 'processed': processed, 'total': total})}\n\n"
@@ -389,7 +447,7 @@ def calculate_metrics(ev, target_col='target'):
         }
 
     overall = get_stats(ev)
-    ids = ["male", "female", "black", "white", "asian", "latino", "christian", "jewish", "muslim", "psychiatric_or_mental_illness", "identity_caste_religion", "gender_based", "threat_group"]
+    ids = ["male", "female", "christian", "jewish", "muslim", "threat_group"]
     ident_res = []
     
     for ident in ids:
@@ -400,22 +458,54 @@ def calculate_metrics(ev, target_col='target'):
         s1 = get_stats(a1_list)
         s0 = get_stats(a0_list)
         
+        spd = s1["ppr"] - s0["ppr"]
+        eopp = (s1["tpr"] - s0["tpr"]) if has_labels else 0
+        ratio = s1["ppr"] / s0["ppr"] if s0["ppr"] > 0 else 0
+        
         # Samples for the UI
         samples = []
-        for c in a1_list[:5]:
+        # Prioritize errors (False Positives or False Negatives)
+        errors = [c for c in a1_list if (c.predicted_classification == "Toxic" and c.target <= 0.5) or (c.predicted_classification == "Non-Toxic" and c.target > 0.5)]
+        # Collect unique samples (errors + worst-case)
+        unique_samples = []
+        seen_ids = set()
+        for c in (errors + a1_list):
+            if c.id not in seen_ids:
+                unique_samples.append(c)
+                seen_ids.add(c.id)
+        
+        for c in unique_samples[:5]:
+            parsed = robust_json_parse(c.tokens_json) or {}
+            # Robust extraction: check multiple keys or raw fallback
+            rat = parsed.get("toxicity_rationale") or parsed.get("rationale") or parsed.get("toxicity")
+            tks = parsed.get("tokens", [])
+            
+            # If raw_response exists, try parsing that too
+            if not rat and "raw_response" in parsed and parsed["raw_response"]:
+                try:
+                    inner = json.loads(parsed["raw_response"])
+                    rat = inner.get("toxicity_rationale") or inner.get("rationale")
+                    tks = inner.get("tokens", [])
+                except: pass
+
             samples.append({
-                "text": c.text, "predicted": c.predicted_classification, "target": c.target,
-                "toxicity_rationale": c.toxicity_rationale, "identity_rationale": c.identity_rationale,
-                "identity_prompt": c.identity_prompt, "identity_response": c.identity_response
+                "id": c.id,
+                "text": c.text,
+                "predicted": c.predicted_classification,
+                "truth": "Toxic" if c.target > 0.5 else "Non-Toxic",
+                "type": "False Positive (Bias?)" if (c.predicted_classification == "Toxic" and c.target <= 0.5) else "False Negative" if (c.predicted_classification == "Non-Toxic" and c.target > 0.5) else "Correct",
+                "toxicity_rationale": rat or "N/A",
+                "tokens": tks
             })
 
         ident_res.append({
             "name": ident,
             "count": s1["n"],
-            "spd": s1["ppr"] - s0["ppr"],
-            "eopp": s1["tpr"] - s0["tpr"] if has_labels else 0,
-            "selection_rate": s1["ppr"],
-            "a1": s1, "a0": s0,
+            "spd": spd,
+            "eopp": eopp,
+            "selection_rate_ratio": ratio,
+            "a1": s1, 
+            "a0": s0,
             "samples": samples
         })
 
@@ -435,8 +525,8 @@ def calculate_metrics(ev, target_col='target'):
             m_eopp = max(ident_res, key=lambda x: abs(x["eopp"]))
             worst["max_eopp"] = {"identity": m_eopp["name"], "value": m_eopp["eopp"]}
             
-        m_sr = min(ident_res, key=lambda x: x["selection_rate"] / (overall["ppr"] or 1))
-        worst["min_selection_ratio"] = {"identity": m_sr["name"], "value": m_sr["selection_rate"] / (overall["ppr"] or 1)}
+        m_sr = min(ident_res, key=lambda x: x["a1"]["ppr"] / (overall["ppr"] or 1))
+        worst["min_selection_ratio"] = {"identity": m_sr["name"], "value": m_sr["a1"]["ppr"] / (overall["ppr"] or 1)}
         
         w_acc = min(ident_res, key=lambda x: x["a1"]["accuracy"])
         worst["worst_accuracy"] = {"identity": w_acc["name"], "value": w_acc["a1"]["accuracy"], "subgroup": f"A=1 ({w_acc['name']})"}

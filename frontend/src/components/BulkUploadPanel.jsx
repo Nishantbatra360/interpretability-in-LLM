@@ -3,7 +3,7 @@ import axios from 'axios';
 import { UploadCloud, Play, Loader2, Database, Trash2, Code, X } from 'lucide-react';
 import InterpretabilityHeatmap from './InterpretabilityHeatmap';
 import InterpretabilityPanel from './InterpretabilityPanel';
-import { PredictionDonut, ConfidenceHistogram } from './Charts';
+import { PredictionDonut, ConfidenceHistogram, TokenHeatmap } from './Charts';
 
 const AVAILABLE_MODELS = [
   { id: 'meta/llama-3.1-8b-instruct', name: 'Llama 3.1 8B (Fastest)' },
@@ -25,6 +25,7 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
   const [selectedFileId, setSelectedFileId] = useState(null);
   
   const [dbStatus, setDbStatus] = useState({ pending: 0, evaluated: 0 });
+  const [globalStats, setGlobalStats] = useState(null);
   const [evaluatedComments, setEvaluatedComments] = useState([]);
   const [expandedRows, setExpandedRows] = useState({});
   const [message, setMessage] = useState('');
@@ -80,6 +81,7 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
       const res = await axios.get(`http://127.0.0.1:8004/file-state/${selectedFileId}`);
       setDbStatus({ pending: res.data.pending, evaluated: res.data.evaluated });
       setEvaluatedComments(res.data.comments || []);
+      setGlobalStats(res.data.stats || null);
     } catch (e) {
       console.error(e);
     }
@@ -379,8 +381,8 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
               <>
                 {/* Visual Summary Charts */}
                 <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: '24px', padding: '16px 0', borderBottom: '1px solid var(--outline-variant)', marginBottom: '20px' }}>
-                  <PredictionDonut comments={evaluatedComments} />
-                  <ConfidenceHistogram comments={evaluatedComments} />
+                  <PredictionDonut comments={evaluatedComments} stats={globalStats} />
+                  <ConfidenceHistogram comments={evaluatedComments} stats={globalStats} />
                 </div>
               
               <div style={{ overflowX: 'auto' }}>
@@ -399,7 +401,10 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
                     {evaluatedComments.map(comment => {
                       return (
                         <React.Fragment key={comment.id}>
-                          <tr style={{ backgroundColor: 'transparent' }}>
+                          <tr 
+                            onClick={() => setExpandedRows(prev => ({ ...prev, [comment.id]: !prev[comment.id] }))}
+                            style={{ backgroundColor: 'transparent', cursor: 'pointer' }}
+                          >
                             <td>
                               <div style={{ padding: '8px 0', lineHeight: '1.5' }}>
                                 {comment.text}
@@ -476,10 +481,65 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
                                   }
                                 }}
                               >
-                                <Code size={14} /> Raw LLM
+                                <Code size={14} /> Audit
                               </button>
                             </td>
                           </tr>
+                          {expandedRows[comment.id] && (
+                            <tr style={{ backgroundColor: 'var(--surface-container-lowest)' }}>
+                              <td colSpan="6" style={{ padding: '16px' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                  <div>
+                                    <div style={{ fontSize: '13px', lineHeight: '1.6', color: 'var(--on-surface)', marginBottom: '12px' }}>
+                                      {(() => {
+                                        const p = JSON.parse(comment.tokens_json || '{}');
+                                        // Robust key checking
+                                        const rat = p.toxicity_rationale || p.rationale || p.toxicity || (p.raw_response ? JSON.parse(p.raw_response).toxicity_rationale : null);
+                                        const tks = p.tokens || (p.raw_response ? JSON.parse(p.raw_response).tokens : []);
+                                        
+                                        return (
+                                          <>
+                                            <div style={{ marginBottom: '8px' }}>{rat || 'No rationale available for this record.'}</div>
+                                            <TokenHeatmap tokens={tks} fullText={comment.text} />
+                                          </>
+                                        );
+                                      })()}
+                                    </div>
+                                  </div>
+                                  <div>
+                                    <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '8px' }}>Identity Detections</div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                      {(() => {
+                                        const p = JSON.parse(comment.tokens_json || '{}');
+                                        const raw_dets = p.raw_response ? JSON.parse(p.raw_response).detections : (p.detections || {});
+                                        
+                                        const idents = [
+                                          { label: 'MALE', val: comment.male || raw_dets.male },
+                                          { label: 'FEMALE', val: comment.female || raw_dets.female },
+                                          { label: 'CHRISTIAN', val: comment.christian || raw_dets.christian },
+                                          { label: 'JEWISH', val: comment.jewish || raw_dets.jewish },
+                                          { label: 'MUSLIM', val: comment.muslim || raw_dets.muslim },
+                                          { label: 'THREAT', val: comment.threat_group || raw_dets.threat_group },
+                                        ].filter(i => i.val > 0.5);
+
+                                        if (idents.length === 0) return <span style={{ fontSize: '12px', color: 'var(--on-surface-variant)', fontStyle: 'italic' }}>No protected identities detected.</span>;
+
+                                        return idents.map(i => (
+                                          <span key={i.label} style={{ 
+                                            padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700', 
+                                            backgroundColor: 'var(--surface-container-high)', color: 'var(--secondary)',
+                                            border: '1px solid var(--secondary)'
+                                          }}>
+                                            {i.label}
+                                          </span>
+                                        ));
+                                      })()}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
                         </React.Fragment>
                       );
                     })}
