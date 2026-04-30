@@ -1,0 +1,111 @@
+Implementation Plan
+Evaluating Explanation Consistency in Zero-Shot LLM Toxicity Classification
+The implementation will be divided across three participants. Each participant owns one major part of
+the pipeline, while the final integration will combine classification, explanation, comparison, and reporting
+outputs.
+Participants should agree on and lock the output file schemas at the end of Day 1 so that downstream
+work can proceed independently. In particular, Participant 2 depends on Participant 1’s output file, and
+Participant 3 depends on outputs from both. Participant 3 should define and mock expected input schemas
+on Day 1 so that comparison and fairness logic can be developed in parallel.
+1 Participant 1: Dataset Preparation and Zero-Shot Classification
+Participant 1 will implement the data loading and baseline classification pipeline.
+•Load the Civil Comments dataset and select the required fields:comment text,target, and available
+identity columns.
+•Normalize the dataset and create a capped working subset for experimentation.
+•Convert the continuous toxicity target into a binary label using a selected threshold, such astarget>
+0.5.
+•Implement the zero-shot toxicity classification prompt.
+•Compute the model score:
+s(x) = logp(toxic|x)−logp(non-toxic|x)
+•Generate predictions using:
+ˆy=
+(
+1 ifs(x)>0
+0 otherwise
+•Save the main prediction output file containing:idx,comment text,target,binary label,log prob toxic,
+log prob nontoxic,score, andprediction.
+Note: both log-probability components must be saved separately, not only the combined scores(x), so
+that downstream analyses can reconstruct confidence and uncertainty estimates.
+2 Participant 2: Explanation Signal Extraction
+Participant 2 will implement the two explanation methods used for comparison: Integrated Gradients and
+attention-based token importance.
+•Select a smaller comparison subset from the prediction output, since explanation methods are more
+computationally expensive. Record the selectedidxvalues so Participant 3 can align results.
+•Implement Integrated Gradients on the toxicity scores(x), using:
+1–zero embedding as the baseline,
+–linear interpolation from the baseline to actual input embeddings,
+–a fixed number of interpolation steps (e.g., 32),
+–gradient computation throughinputs embedsto ensure attribution reflects prompt-token contri-
+butions.
+Positive attribution indicates contribution towardtoxic; negative attribution indicates contribution
+towardnon-toxic.
+•For each selected example, compute token-level IG attribution scores.
+•Extract attention weights from selected transformer layer(s), such as the final layer or final few layers.
+•Aggregate attention weights across heads into a single token-level attention importance vector.
+•Normalize IG and attention scores so that they can be compared over the same token sequence.
+•Save an explanation output file containing:idx,tokens,ig scores, andattention scores.
+•On Day 3, produce three target heatmaps showing IG and attention side by side:
+1. a correctly classified toxic example with high IG–attention agreement,
+2. a false positive where the two methods diverge,
+3. a borderline or ambiguous example illustrating how disagreement relates to model uncertainty.
+3 Participant 3: Comparison, Fairness Metrics, and Reporting
+Participant 3 will implement the comparison logic, fairness evaluation, correlation analysis, and final report-
+ing outputs.
+•Align the IG attribution vector and attention importance vector for each selected example.
+•Compute explanation agreement metrics, such as top-ktoken overlap or rank correlation, producing a
+per-example agreement score.
+•Identify examples where IG and attention agree strongly, and examples where they diverge.
+•Analyze whether explanation disagreements are correlated with borderline predictions, fairness-relevant
+identity terms, or elevated model uncertainty. This correlation analysis requires merging the explana-
+tion agreement scores with the prediction scores and identity columns from Participant 1’s output.
+•Merge classification predictions with identity columns.
+•Apply a minimum group-size filter (e.g.,n≥50) before computing per-group disparity metrics, to
+avoid unstable small-sample estimates.
+•Compute per-group fairness metrics for each identity subgroup (A= 0 andA= 1), including: accuracy,
+F1, true positive rate (TPR), false positive rate (FPR), and positive prediction rate.
+•Compute disparity metrics for each identity:
+SPD =P( ˆY= 1|A= 1)−P( ˆY= 1|A= 0) (1)
+EOpp = TPRA=1 −TPR A=0 (2)
+•Report worst-case metrics across all identities: max|SPD|, max|EOpp|, worst subgroup accuracy, and
+worst subgroup F1.
+•Produce final output files:
+2–predictions.csv— prediction results,
+–explanation comparison.csv— per-example IG and attention scores,
+–explanation agreement.csv— per-example agreement score and divergence flag (idx,agreement score,
+divergence flag),
+–fairness metrics.csv— per-group and per-identity metrics,
+–worst case summary.csv— worst-case subgroup summary,
+–selected heatmap visualizations (produced by Participant 2).
+4 Three-Day Build Schedule
+4.1 Day 1: Pipeline Skeleton and Schema Lock
+The goal of Day 1 is to get the basic end-to-end structure working and to lock inter-participant file schemas
+so downstream work can proceed independently.
+•Participant 1 loads the dataset and produces the first prediction file, including all required columns
+(idx,comment text,target,binary label,log prob toxic,log prob nontoxic,score,prediction).
+•Participant 2 creates placeholder functions for IG and attention extraction, and confirms the explana-
+tion output schema (idx,tokens,ig scores,attention scores).
+•Participant 3 defines the expected output format for comparison and reporting, and mocks the input
+schemas so that fairness and agreement logic can be developed in parallel.
+4.2 Day 2: Explanation Methods
+The goal of Day 2 is to replace placeholder logic with real explanation signals.
+•Participant 1 improves or validates the zero-shot scoring logic.
+•Participant 2 implements real IG and attention extraction on a small subset.
+•Participant 3 implements top-koverlap or rank correlation between explanation methods, and begins
+the fairness metric pipeline.
+4.3 Day 3: Analysis and Presentation
+The goal of Day 3 is to produce interpretable results and prepare the final presentation.
+•Participant 1 finalizes classification results.
+•Participant 2 finalizes explanation outputs and produces three target heatmaps: (1) a correctly clas-
+sified toxic example with high IG–attention agreement, (2) a false positive where the two methods
+diverge, and (3) a borderline example illustrating how disagreement relates to model uncertainty.
+•Participant 3 finalizes fairness metrics, agreement metrics, the divergence correlation analysis, and all
+summary findings and output CSVs.
+5 Minimum Viable Deliverable
+The minimum viable deliverable is an end-to-end prototype that:
+1. loads a sample of Civil Comments,
+2. classifies comments as toxic or non-toxic using zero-shot scoring,
+33. computes IG and attention scores for a small subset,
+4. compares the two explanation signals and produces per-example agreement scores,
+5. produces at least one side-by-side heatmap,
+6. and reports basic fairness metrics across identity groups.
+4

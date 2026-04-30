@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Model Comparison - ToxicityLens AI</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "surface-container": "#ededf9",
+                        "on-primary": "#ffffff",
+                        "inverse-on-surface": "#f0f0fb",
+                        "on-error-container": "#93000a",
+                        "on-secondary-fixed-variant": "#38485d",
+                        "inverse-surface": "#2e3039",
+                        "on-primary-container": "#eeefff",
+                        "secondary-fixed": "#d3e4fe",
+                        "primary-fixed": "#dbe1ff",
+                        "on-primary-fixed": "#00174b",
+                        "surface-container-high": "#e7e7f3",
+                        "on-tertiary": "#ffffff",
+                        "primary-fixed-dim": "#b4c5ff",
+                        "surface-bright": "#faf8ff",
+                        "surface-container-lowest": "#ffffff",
+                        "secondary-container": "#d0e1fb",
+                        "surface-variant": "#e1e2ed",
+                        "on-surface": "#191b23",
+                        "primary": "#004ac6",
+                        "on-secondary-container": "#54647a",
+                        "secondary": "#505f76",
+                        "outline-variant": "#c3c6d7",
+                        "surface": "#faf8ff",
+                        "on-tertiary-container": "#ffede6",
+                        "error": "#ba1a1a",
+                        "outline": "#737686",
+                        "tertiary-fixed": "#ffdbcd",
+                        "error-container": "#ffdad6",
+                        "surface-dim": "#d9d9e5",
+                        "tertiary-container": "#bc4800",
+                        "secondary-fixed-dim": "#b7c8e1",
+                        "tertiary": "#943700",
+                        "on-tertiary-fixed-variant": "#7d2d00",
+                        "surface-container-highest": "#e1e2ed",
+                        "surface-container-low": "#f3f3fe",
+                        "tertiary-fixed-dim": "#ffb596",
+                        "on-background": "#191b23",
+                        "on-secondary": "#ffffff",
+                        "inverse-primary": "#b4c5ff",
+                        "on-primary-fixed-variant": "#003ea8",
+                        "primary-container": "#2563eb",
+                        "surface-tint": "#0053db",
+                        "on-surface-variant": "#434655",
+                        "on-secondary-fixed": "#0b1c30",
+                        "on-tertiary-fixed": "#360f00",
+                        "background": "#faf8ff",
+                        "on-error": "#ffffff"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "spacing": {
+                        "space-sm": "8px",
+                        "space-md": "16px",
+                        "gutter": "16px",
+                        "container-margin": "32px",
+                        "unit": "4px",
+                        "space-xs": "4px",
+                        "space-lg": "24px"
+                    },
+                    "fontFamily": {
+                        "body-base": ["Inter"],
+                        "code-snippet": ["monospace"],
+                        "h1": ["Inter"],
+                        "data-tabular": ["Inter"],
+                        "body-sm": ["Inter"],
+                        "h2": ["Inter"],
+                        "label-caps": ["Inter"]
+                    },
+                    "fontSize": {
+                        "body-base": ["14px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "code-snippet": ["13px", { "lineHeight": "20px", "fontWeight": "400" }],
+                        "h1": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "600" }],
+                        "data-tabular": ["13px", { "lineHeight": "18px", "fontWeight": "500" }],
+                        "body-sm": ["12px", { "lineHeight": "16px", "fontWeight": "400" }],
+                        "h2": ["18px", { "lineHeight": "24px", "fontWeight": "600" }],
+                        "label-caps": ["11px", { "lineHeight": "16px", "letterSpacing": "0.05em", "fontWeight": "700" }]
+                    }
+                }
+            }
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .fill-icon {
+            font-variation-settings: 'FILL' 1;
+        }
+    </style>
+</head>
+<body class="bg-surface text-on-surface font-body-base antialiased flex">
+<!-- SideNavBar -->
+<nav class="fixed left-0 top-0 flex flex-col h-full z-40 w-64 border-r border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900">
+<div class="p-6">
+<h1 class="font-h2 text-h2 text-primary font-bold">Interpretability Lab</h1>
+<p class="font-body-sm text-body-sm text-on-surface-variant mt-1">Precision AI Auditing</p>
+</div>
+<div class="flex-1 overflow-y-auto py-4">
+<a class="group flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all font-label-caps text-label-caps uppercase tracking-widest font-bold" href="#">
+<span class="material-symbols-outlined text-xl">dashboard</span>
+<span>Dashboard</span>
+</a>
+<a class="group flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all font-label-caps text-label-caps uppercase tracking-widest font-bold" href="#">
+<span class="material-symbols-outlined text-xl">analytics</span>
+<span>Deep-Dive</span>
+</a>
+<a class="group flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all font-label-caps text-label-caps uppercase tracking-widest font-bold" href="#">
+<span class="material-symbols-outlined text-xl">balance</span>
+<span>Fairness Metrics</span>
+</a>
+<a class="group flex items-center gap-3 px-4 py-3 bg-white dark:bg-slate-800 text-primary border-r-2 border-primary font-label-caps text-label-caps uppercase tracking-widest font-bold" href="#">
+<span class="material-symbols-outlined text-xl fill-icon">compare_arrows</span>
+<span>Model Comparison</span>
+</a>
+</div>
+<div class="p-4 border-t border-slate-200 dark:border-slate-800">
+<a class="group flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all font-label-caps text-label-caps uppercase tracking-widest font-bold" href="#">
+<span class="material-symbols-outlined text-xl">menu_book</span>
+<span>Documentation</span>
+</a>
+<a class="group flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/50 transition-all font-label-caps text-label-caps uppercase tracking-widest font-bold" href="#">
+<span class="material-symbols-outlined text-xl">support_agent</span>
+<span>Support</span>
+</a>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="ml-64 flex-1 flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-6 h-16 w-full border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 z-30 sticky top-0">
+<div class="flex items-center gap-4">
+<span class="text-lg font-bold text-slate-900 dark:text-white font-sans tracking-tight">ToxicityLens AI</span>
+</div>
+<div class="flex-1 max-w-md mx-6">
+<div class="relative flex items-center">
+<span class="material-symbols-outlined absolute left-3 text-on-surface-variant">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface-container-low border border-outline-variant rounded-DEFAULT focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent font-body-base text-body-base text-on-surface" placeholder="Search explanations..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors p-2 rounded-full cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">notifications</span>
+</button>
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors p-2 rounded-full cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">settings</span>
+</button>
+<button class="text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors p-2 rounded-full cursor-pointer active:opacity-80">
+<span class="material-symbols-outlined">help</span>
+</button>
+<button class="bg-primary text-on-primary px-4 py-2 rounded-DEFAULT font-data-tabular text-data-tabular hover:bg-surface-tint transition-colors ml-2">
+                    Run Audit
+                </button>
+<img alt="User profile" class="w-8 h-8 rounded-full border border-outline-variant ml-2" data-alt="A small, circular headshot portrait of a professional individual looking confident. The photo is well-lit with a bright, neutral background, suitable for a corporate AI application avatar. The colors are natural and balanced." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAKmRfIXYKHUwML_aniiaNxFuZLcjpxaTH-Hykp04WIcPcp_s_LzGu-FSmClSGk-xvuJiwPMfPDYpCeL3OKlsjclsqHQ4ekh_z7W6KoJct2vRid04jNVP6Yfxi-oU503C4RE_iE1xdZiqCmCHwKBsNIMZw53AsgOf-XZF9yW4dX4B1hW_PsRc9xRohKqM1PExar-jeDAY0YEpDHJRV1TKF2F84ApKtFB-xJyDMUixkdP1kXXQKvNvXGxf1z4Zd8pBC4qoAsxvu5Fg4"/>
+</div>
+</header>
+<!-- Canvas -->
+<div class="p-container-margin flex-1 overflow-y-auto">
+<div class="mb-space-lg flex justify-between items-end">
+<div>
+<h2 class="font-h1 text-h1 text-on-surface">Explanation Method Comparison</h2>
+<p class="font-body-base text-body-base text-on-surface-variant mt-1">Comparing Integrated Gradients (IG) vs. Attention mechanisms on specific text inputs.</p>
+</div>
+<div class="flex items-center gap-space-sm bg-surface-container-low p-2 rounded-lg border border-outline-variant">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase px-2">Agreement Score</span>
+<span class="font-h2 text-h2 text-primary">85%</span>
+<span class="material-symbols-outlined text-primary text-sm">info</span>
+</div>
+</div>
+<!-- Comparison Bento Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-gutter mb-space-lg">
+<!-- IG Panel -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-space-md flex flex-col">
+<div class="flex justify-between items-center mb-space-sm pb-space-sm border-b border-outline-variant">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Method 1: Integrated Gradients (IG)</span>
+<div class="flex items-center gap-1">
+<span class="w-3 h-3 rounded-full bg-error inline-block"></span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">High Toxicity Attribution</span>
+</div>
+</div>
+<div class="font-body-base text-body-base leading-relaxed p-4 bg-surface-container-low rounded-DEFAULT mt-2 flex-1">
+                        "I think this <span class="bg-error/20 text-error-container font-semibold px-1 rounded">policy</span> is an absolute <span class="bg-error/60 text-on-error font-semibold px-1 rounded">disaster</span> and anyone supporting it is completely <span class="bg-error text-on-error font-semibold px-1 rounded">delusional</span>."
+                    </div>
+<div class="mt-space-md pt-space-sm border-t border-outline-variant">
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Top Token: "delusional" (+0.82)</span>
+<button class="font-body-sm text-body-sm text-primary hover:underline">View Detail</button>
+</div>
+</div>
+</div>
+<!-- Attention Panel -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-space-md flex flex-col">
+<div class="flex justify-between items-center mb-space-sm pb-space-sm border-b border-outline-variant">
+<span class="font-label-caps text-label-caps text-on-surface-variant uppercase">Method 2: Attention Weights</span>
+<div class="flex items-center gap-1">
+<span class="w-3 h-3 rounded-full bg-tertiary inline-block"></span>
+<span class="font-body-sm text-body-sm text-on-surface-variant">High Attention Weight</span>
+</div>
+</div>
+<div class="font-body-base text-body-base leading-relaxed p-4 bg-surface-container-low rounded-DEFAULT mt-2 flex-1">
+                        "I <span class="bg-tertiary/20 text-tertiary-container font-semibold px-1 rounded">think</span> this policy is an absolute <span class="bg-tertiary/40 text-on-tertiary-container font-semibold px-1 rounded">disaster</span> and anyone supporting it is completely <span class="bg-tertiary/80 text-on-tertiary font-semibold px-1 rounded">delusional</span>."
+                    </div>
+<div class="mt-space-md pt-space-sm border-t border-outline-variant">
+<div class="flex justify-between items-center">
+<span class="font-body-sm text-body-sm text-on-surface-variant">Top Token: "delusional" (0.45 weight)</span>
+<button class="font-body-sm text-body-sm text-primary hover:underline">View Detail</button>
+</div>
+</div>
+</div>
+</div>
+<!-- Divergence Highlight -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-space-md mb-space-lg">
+<h3 class="font-h2 text-h2 text-on-surface mb-space-sm">Key Divergence Analysis</h3>
+<p class="font-body-sm text-body-sm text-on-surface-variant mb-space-md">Areas where the two explanation methods attribute significantly different importance to the same tokens.</p>
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-outline-variant font-label-caps text-label-caps text-on-surface-variant uppercase">
+<th class="py-2 pl-2">Token</th>
+<th class="py-2">IG Score</th>
+<th class="py-2">Attention Weight</th>
+<th class="py-2">Delta</th>
+</tr>
+</thead>
+<tbody class="font-data-tabular text-data-tabular text-on-surface">
+<tr class="border-b border-surface-variant hover:bg-surface-container-low transition-colors">
+<td class="py-3 pl-2">"policy"</td>
+<td class="py-3 text-error">0.31</td>
+<td class="py-3 text-on-surface-variant">0.05</td>
+<td class="py-3">
+<div class="flex items-center gap-2">
+<span class="w-16 h-1 bg-surface-variant rounded-full overflow-hidden">
+<span class="bg-primary h-full block" style="width: 40%"></span>
+</span>
+<span>0.26</span>
+</div>
+</td>
+</tr>
+<tr class="border-b border-surface-variant hover:bg-surface-container-low transition-colors">
+<td class="py-3 pl-2">"think"</td>
+<td class="py-3 text-on-surface-variant">0.02</td>
+<td class="py-3 text-tertiary">0.22</td>
+<td class="py-3">
+<div class="flex items-center gap-2">
+<span class="w-16 h-1 bg-surface-variant rounded-full overflow-hidden">
+<span class="bg-tertiary h-full block" style="width: 30%"></span>
+</span>
+<span>0.20</span>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Borderline Examples Section -->
+<div>
+<h3 class="font-h2 text-h2 text-on-surface mb-space-md">Borderline / Ambiguous Examples</h3>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-gutter">
+<!-- Example 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-space-sm hover:border-primary transition-colors cursor-pointer">
+<div class="flex justify-between items-center mb-2">
+<span class="font-label-caps text-label-caps text-secondary uppercase">ID: TX-882</span>
+<span class="bg-surface-container-high px-2 py-1 rounded text-xs font-data-tabular">Low Agreement (42%)</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface line-clamp-3">"I suppose that's one way to ruin a perfectly good system, if you're into that sort of thing."</p>
+</div>
+<!-- Example 2 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-space-sm hover:border-primary transition-colors cursor-pointer">
+<div class="flex justify-between items-center mb-2">
+<span class="font-label-caps text-label-caps text-secondary uppercase">ID: TX-901</span>
+<span class="bg-surface-container-high px-2 py-1 rounded text-xs font-data-tabular">Low Agreement (38%)</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface line-clamp-3">"Brilliant. Just brilliant. I've never seen such an impressive display of incompetence in my life."</p>
+</div>
+<!-- Example 3 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-space-sm hover:border-primary transition-colors cursor-pointer border-dashed border-2 flex items-center justify-center">
+<div class="text-center text-on-surface-variant">
+<span class="material-symbols-outlined text-2xl mb-1 block">add_circle</span>
+<span class="font-label-caps text-label-caps uppercase">Load More</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+</main>
+</body></html>
