@@ -29,7 +29,8 @@ const ClassificationPanel = ({ initialText = '' }) => {
     if (IS_DEMO && !initialText) {
       const loadDemo = async () => {
         try {
-          const res = await axios.get('/demo_data/deep_dive_sample.json');
+          const publicBase = import.meta.env.BASE_URL;
+          const res = await axios.get(`${publicBase}demo_data/deep_dive_sample.json`);
           setResult(res.data);
           setText(res.data.text);
         } catch (e) {

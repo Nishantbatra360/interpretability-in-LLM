@@ -2,22 +2,23 @@ import axios from 'axios';
 
 const IS_DEMO = import.meta.env.VITE_DEMO_MODE === 'true';
 const BASE_URL = 'http://127.0.0.1:8004';
+const PUBLIC_BASE = import.meta.env.BASE_URL;
 
 const api = {
   getFiles: async () => {
-    const url = IS_DEMO ? '/demo_data/files.json' : `${BASE_URL}/files`;
+    const url = IS_DEMO ? `${PUBLIC_BASE}demo_data/files.json` : `${BASE_URL}/files`;
     const res = await axios.get(url);
     return res.data;
   },
   
   getFileState: async (id) => {
-    const url = IS_DEMO ? `/demo_data/file_state_${id}.json` : `${BASE_URL}/file-state/${id}`;
+    const url = IS_DEMO ? `${PUBLIC_BASE}demo_data/file_state_${id}.json` : `${BASE_URL}/file-state/${id}`;
     const res = await axios.get(url);
     
     // In demo mode, we also need evaluated comments which are separate files
     if (IS_DEMO) {
       try {
-        const commentsRes = await axios.get(`/demo_data/evaluated_comments_${id}.json`);
+        const commentsRes = await axios.get(`${PUBLIC_BASE}demo_data/evaluated_comments_${id}.json`);
         res.data.comments = commentsRes.data;
       } catch (e) {
         res.data.comments = [];
@@ -27,7 +28,7 @@ const api = {
   },
   
   getMetrics: async (id) => {
-    const url = IS_DEMO ? `/demo_data/metrics_${id}.json` : `${BASE_URL}/metrics?file_id=${id}`;
+    const url = IS_DEMO ? `${PUBLIC_BASE}demo_data/metrics_${id}.json` : `${BASE_URL}/metrics?file_id=${id}`;
     const res = await axios.get(url);
     return res.data;
   },
