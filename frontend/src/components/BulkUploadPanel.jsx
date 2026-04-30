@@ -3,6 +3,7 @@ import axios from 'axios';
 import { UploadCloud, Play, Loader2, Database, Trash2, Code, X } from 'lucide-react';
 import InterpretabilityHeatmap from './InterpretabilityHeatmap';
 import InterpretabilityPanel from './InterpretabilityPanel';
+import { PredictionDonut, ConfidenceHistogram } from './Charts';
 
 const AVAILABLE_MODELS = [
   { id: 'meta/llama-3.1-70b-instruct', name: 'Llama 3.1 70B (Recommended)' },
@@ -104,7 +105,7 @@ const BulkUploadPanel = () => {
         const res = await axios.get(`http://127.0.0.1:8004/progress/${selectedFileId}`);
         setProgress(prev => prev ? { ...prev, evaluated: res.data.evaluated, pending: res.data.pending } : prev);
       } catch (e) { /* silent */ }
-    }, 1500);
+    }, 4000);
     return () => clearInterval(interval);
   }, [evaluating, selectedFileId]);
 
@@ -351,57 +352,39 @@ const BulkUploadPanel = () => {
             <div className="card-header">
               <h2>Evaluated Comments</h2>
               <div style={{ marginTop: '12px', padding: '12px', backgroundColor: 'var(--surface-container-low)', borderLeft: '3px solid var(--secondary)', borderRadius: '4px', fontSize: '13px', color: 'var(--on-surface-variant)' }}>
-                <strong>Interpretability Methodology:</strong> Simulated Attention Score = <code style={{fontFamily: 'var(--font-mono)'}}>log P(toxic | token) - log P(non-toxic | token)</code><br/>
-                A positive score pulls the prediction towards Toxic. A negative score pulls it towards Non-Toxic. Click any row to view exact token values.
+                <strong>Zero-Shot Performance:</strong> This table shows the raw logprob-based classification results without the heavy token attribution calculation. To view token-level causality and heatmaps for any specific comment, copy its text and use the <strong>Deep Dive</strong> tab.
               </div>
             </div>
             {evaluatedComments.length === 0 ? (
               <p style={{ color: 'var(--on-surface-variant)', fontSize: '14px' }}>No evaluated comments to display.</p>
             ) : (
+              <>
+                {/* Visual Summary Charts */}
+                <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: '24px', padding: '16px 0', borderBottom: '1px solid var(--outline-variant)', marginBottom: '20px' }}>
+                  <PredictionDonut comments={evaluatedComments} />
+                  <ConfidenceHistogram comments={evaluatedComments} />
+                </div>
+              
               <div style={{ overflowX: 'auto' }}>
                 <table className="metrics-table" style={{ width: '100%', fontSize: '13px' }}>
                   <thead>
                     <tr>
-                      <th style={{ width: '28%' }}>Comment &amp; Interpretability</th>
-                      <th style={{ width: '12%' }}>Key Drivers</th>
+                      <th style={{ width: '40%' }}>Comment Text</th>
                       <th>LLM Prediction</th>
                       <th>Confidence</th>
                       <th>Ground Truth</th>
-                      <th>Sub-Scores</th>
-                      <th>Raw JSON</th>
+                      <th>Demographic Sub-Scores</th>
+                      <th>API Request</th>
                     </tr>
                   </thead>
                   <tbody>
                     {evaluatedComments.map(comment => {
-                      const drivers = getTopDrivers(comment.tokens_json);
-                      const isExpanded = expandedRows[comment.id];
-                      
                       return (
                         <React.Fragment key={comment.id}>
-                          <tr 
-                            onClick={() => toggleRow(comment.id)}
-                            style={{ cursor: 'pointer', backgroundColor: isExpanded ? 'var(--surface-container-lowest)' : 'transparent' }}
-                          >
+                          <tr style={{ backgroundColor: 'transparent' }}>
                             <td>
-                              {comment.tokens_json ? (
-                                <InterpretabilityHeatmap tokens={JSON.parse(comment.tokens_json)} />
-                              ) : (
-                                comment.text
-                              )}
-                            </td>
-                            <td>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                {drivers.toxic && (
-                                  <div style={{ fontSize: '12px', color: 'var(--toxic)' }}>
-                                    <strong>+{drivers.toxic.attribution.toFixed(2)}</strong> : "{drivers.toxic.token}"
-                                  </div>
-                                )}
-                                {drivers.safe && (
-                                  <div style={{ fontSize: '12px', color: 'var(--non-toxic)' }}>
-                                    <strong>{drivers.safe.attribution.toFixed(2)}</strong> : "{drivers.safe.token}"
-                                  </div>
-                                )}
-                                {!drivers.toxic && !drivers.safe && <span style={{ color: 'var(--on-surface-variant)' }}>Neutral</span>}
+                              <div style={{ padding: '8px 0', lineHeight: '1.5' }}>
+                                {comment.text}
                               </div>
                             </td>
                             <td>
@@ -468,64 +451,60 @@ const BulkUploadPanel = () => {
                                 style={{ padding: '4px 8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: 'var(--surface-container-high)' }}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setModalData({
-                                    id: comment.id,
-                                    classification: comment.predicted_classification,
-                                    confidence: comment.confidence,
-                                    tokens: JSON.parse(comment.tokens_json)
-                                  });
+                                  try {
+                                    setModalData(JSON.parse(comment.tokens_json || '{}'));
+                                  } catch (err) {
+                                    setModalData({ error: 'No debug data available.' });
+                                  }
                                 }}
                               >
-                                <Code size={14} /> View
+                                <Code size={14} /> Logprobs
                               </button>
                             </td>
                           </tr>
-                          
-                          {isExpanded && comment.tokens_json && (
-                            <tr style={{ backgroundColor: 'var(--surface-container-low)' }}>
-                              <td colSpan="7" style={{ padding: '20px' }}>
-                                <InterpretabilityPanel
-                                  tokens={JSON.parse(comment.tokens_json)}
-                                  confidence={comment.confidence}
-                                  classification={comment.predicted_classification}
-                                  compact={true}
-                                />
-                              </td>
-                            </tr>
-                          )}
                         </React.Fragment>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </div>
         )}
     </div>
 
-    {/* Raw JSON Modal */}
+    {/* Raw API Request/Response Modal */}
     {modalData && (
       <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setModalData(null)}>
         <div style={{ backgroundColor: 'var(--surface)', padding: '24px', borderRadius: '8px', width: '80%', maxWidth: '800px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h2 style={{ margin: 0, fontSize: '18px' }}>Raw LLM JSON Output</h2>
+            <h2 style={{ margin: 0, fontSize: '18px' }}>Zero-Shot API Request & Logprobs</h2>
             <button onClick={() => setModalData(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--on-surface-variant)' }}><X size={20} /></button>
           </div>
-          <pre style={{ 
-            backgroundColor: '#1e1e1e', 
-            color: '#d4d4d4', 
-            padding: '16px', 
-            borderRadius: '6px', 
-            overflowX: 'auto',
-            fontSize: '13px',
-            fontFamily: 'var(--font-mono)',
-            flex: 1,
-            overflowY: 'auto',
-            margin: 0
-          }}>
-            {JSON.stringify(modalData, null, 2)}
-          </pre>
+          
+          <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <h3 style={{ fontSize: '14px', color: 'var(--on-surface-variant)', marginBottom: '8px' }}>Raw Prompt Sent:</h3>
+              <pre style={{ backgroundColor: 'var(--surface-container-low)', color: 'var(--on-surface)', padding: '16px', borderRadius: '6px', whiteSpace: 'pre-wrap', fontSize: '13px', border: '1px solid var(--outline-variant)', margin: 0 }}>
+                {modalData.prompt || 'N/A'}
+              </pre>
+            </div>
+            
+            <div>
+              <h3 style={{ fontSize: '14px', color: 'var(--on-surface-variant)', marginBottom: '8px' }}>Raw LLM Response:</h3>
+              <pre style={{ backgroundColor: '#1e1e1e', color: '#00ff88', padding: '16px', borderRadius: '6px', fontSize: '20px', fontFamily: 'var(--font-mono)', margin: 0 }}>
+                {modalData.raw_response || 'N/A'}
+              </pre>
+            </div>
+
+            <div>
+              <h3 style={{ fontSize: '14px', color: 'var(--on-surface-variant)', marginBottom: '8px' }}>Logprobs (Used for Mathematical Scoring):</h3>
+              <pre style={{ backgroundColor: '#1e1e1e', color: '#d4d4d4', padding: '16px', borderRadius: '6px', overflowX: 'auto', fontSize: '13px', fontFamily: 'var(--font-mono)', margin: 0 }}>
+                {JSON.stringify(modalData.logprobs || modalData, null, 2)}
+              </pre>
+            </div>
+          </div>
         </div>
       </div>
     )}

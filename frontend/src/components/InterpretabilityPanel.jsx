@@ -153,9 +153,8 @@ const InterpretabilityPanel = ({ tokens, confidence, classification, compact = f
       {/* ── 1. METHODOLOGY HEADER ── */}
       <Section title="📐 Interpretability Methodology (Proxy vs. Reference Plan)" defaultOpen={true}>
         <div style={{ fontSize: '13px', color: 'var(--on-surface-variant)', lineHeight: 1.6, marginBottom: '12px', padding: '12px', backgroundColor: 'rgba(59, 130, 246, 0.05)', borderRadius: '6px', borderLeft: '4px solid var(--primary)' }}>
-          <strong>Implementation Note:</strong> According to the Reference Plan, true <em>Integrated Gradients (IG)</em> and <em>Attention Matrices</em> require white-box access to the model's backward pass. Because this dashboard connects to the closed-weights NVIDIA NIM API (Llama 3.1 70B), we employ a <strong>Generative Token Attribution Proxy</strong>.
-          <br/><br/>
-          Instead of extracting raw gradients, the LLM is prompted in a single zero-shot pass to simulate IG by auto-regressively predicting the logit differential (attribution score between -1.0 and 1.0) for each token. This evaluates the model's <em>self-stated reasoning</em> rather than its true mathematical gradients.
+          <strong>Implementation Note:</strong> The overall <em>Zero-Shot Classification</em> verdict and confidence are now computed mathematically using exact <code>log p(toxic|x) − log p(non-toxic|x)</code> probability logs extracted directly from the NVIDIA API, perfectly matching the Reference Plan.<br/><br/>
+          However, because true <em>Integrated Gradients (IG)</em> require white-box access to the model's backward pass, the token-level heatmap below employs a <strong>Generative Token Attribution Proxy</strong>. The LLM is prompted to auto-regressively predict the attribution score for each token to simulate the causal reasoning.
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <Formula

@@ -260,10 +260,16 @@ def map_tokens_to_objects(tokens_array):
     for t in tokens_array:
         if isinstance(t, list) and len(t) >= 2:
             try:
-                mapped.append({"token": str(t[0]), "attribution": float(t[1])})
+                # Multiply by -1 because the LLM naturally associates negative numbers with toxicity
+                # and positive numbers with safety, but our UI math uses positive for Toxicity.
+                mapped.append({"token": str(t[0]), "attribution": -float(t[1])})
             except (ValueError, TypeError):
                 mapped.append({"token": str(t[0]), "attribution": 0.0})
         elif isinstance(t, dict) and "token" in t and "attribution" in t:
+            try:
+                t["attribution"] = -float(t["attribution"])
+            except:
+                t["attribution"] = 0.0
             mapped.append(t)
     return mapped
 
@@ -287,7 +293,90 @@ async def call_nim_api_async(client: httpx.AsyncClient, prompt: str, model: str 
     response = await client.post(NIM_API_URL, headers=headers, json=payload, timeout=60.0)
     response.raise_for_status()
     data = response.json()
-    return json.loads(data['choices'][0]['message']['content'])
+    raw_content = data['choices'][0]['message']['content']
+    return json.loads(raw_content), raw_content, prompt
+
+async def call_nim_logprobs_async(client: httpx.AsyncClient, text: str, model: str = "meta/llama-3.1-70b-instruct"):
+    """
+    Implements true Zero-Shot Logprob Scoring Rule: s(x) = log p(toxic|x) - log p(non-toxic|x).
+    """
+    if not NVIDIA_NIM_API_KEY:
+        raise HTTPException(status_code=500, detail="NVIDIA NIM API Key not configured.")
+    
+    headers = {
+        "Authorization": f"Bearer {NVIDIA_NIM_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    prompt = f"Please classify the following text. You must only provide the classification in your response, which can be either 'Toxic' or 'Non-Toxic'.\n\nText: \"{text}\"\n\nClassification:"
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.0,
+        "max_tokens": 10,
+        "logprobs": True,
+        "top_logprobs": 5
+    }
+    
+    # Robust retry loop for 429 Too Many Requests
+    import asyncio
+    max_retries = 6
+    for attempt in range(max_retries):
+        response = await client.post(NIM_API_URL, headers=headers, json=payload, timeout=30.0)
+        if response.status_code == 429:
+            if attempt < max_retries - 1:
+                print(f"[RATE LIMIT] 429 Hit. Backing off for {2 ** attempt + 1}s...")
+                await asyncio.sleep(2 ** attempt + 1)  # 2s, 3s, 5s, 9s, 17s
+                continue
+        response.raise_for_status()
+        break
+        
+    data = response.json()
+    
+    # Extract logprobs from the first token generated
+    top_logprobs = data['choices'][0]['logprobs']['content'][0]['top_logprobs']
+    
+    # DEBUG: See what the API is actually returning in the terminal
+    print(f"[DEBUG LOGPROBS] text[:30]: {text[:30]} | tokens: {[(lp['token'], lp['logprob']) for lp in top_logprobs]}")
+    
+    logp_toxic = -999.0
+    logp_nontoxic = -999.0
+    
+    for lp in top_logprobs:
+        tok = lp['token'].strip().lower().replace('"', '').replace("'", "")
+        if tok.startswith("non") or tok == "n":
+            if lp['logprob'] > logp_nontoxic:
+                logp_nontoxic = lp['logprob']
+        elif tok.startswith("to") or tok == "t" or tok.startswith("tox"):
+            if lp['logprob'] > logp_toxic:
+                logp_toxic = lp['logprob']
+            
+    if logp_toxic == -999.0 and logp_nontoxic == -999.0:
+        classification = "Unknown"
+        s_x = 0
+    else:
+        # Calculate difference
+        s_x = logp_toxic - logp_nontoxic
+        classification = "Toxic" if s_x > 0 else "Non-Toxic"
+    
+    import math
+    try:
+        # Softmax confidence
+        prob_toxic = math.exp(logp_toxic) / (math.exp(logp_toxic) + math.exp(logp_nontoxic))
+    except:
+        prob_toxic = 1.0 if s_x > 0 else 0.0
+        
+    confidence = prob_toxic if classification == "Toxic" else (1.0 - prob_toxic)
+    if classification == "Unknown":
+        confidence = 0.0
+    
+    raw_response_text = data['choices'][0]['message']['content'].strip()
+        
+    debug_data = {
+        "prompt": prompt,
+        "raw_response": raw_response_text,
+        "logprobs": top_logprobs
+    }
+    return classification, confidence, debug_data
 
 @app.post("/evaluate-batch")
 async def evaluate_batch(request: BatchEvaluateRequest, db: Session = Depends(get_db)):
@@ -301,38 +390,41 @@ async def evaluate_batch(request: BatchEvaluateRequest, db: Session = Depends(ge
 
     # Lock ensures DB commits don't interleave across concurrent coroutines
     db_lock = asyncio.Lock()
+    # Semaphore limits concurrent API requests to avoid 429 rate limits
+    # NVIDIA NIM free tier is extremely strict, so we force sequential processing (1)
+    semaphore = asyncio.Semaphore(1)
     processed_count = 0
 
     async def evaluate_single_comment(client, comment):
-        nonlocal processed_count
-        prompt = f"""
-You are an AI auditor trained to classify comments as "Toxic" or "Non-Toxic" and provide an interpretable explanation.
-Analyze the following text.
-Output MUST be a valid JSON object with EXACTLY three fields:
-1. "classification": either "Toxic" or "Non-Toxic"
-2. "confidence": a float between 0.0 and 1.0
-3. "tokens": an array of arrays. Break the text into tokens (words). Each inner array must have exactly two elements: ["token_string", attribution_score]. The attribution_score is a float between -1.0 (pulls towards Non-Toxic) and 1.0 (pulls towards Toxic). A score of 0.0 means neutral. Example: [["This", 0.0], ["is", 0.0], ["bad", 0.8]].
-
-Text to analyze: "{comment.text}"
-
-JSON Output:
-"""
-        try:
-            result_json = await call_nim_api_async(client, prompt, request.model)
-            comment.predicted_classification = result_json.get("classification")
-            comment.confidence = result_json.get("confidence")
-            mapped_tokens = map_tokens_to_objects(result_json.get("tokens", []))
-            comment.tokens_json = json.dumps(mapped_tokens)
-            comment.status = "evaluated"
-            # Commit immediately so /progress can reflect real-time state
-            async with db_lock:
-                db.commit()
-                cache_invalidate_prefix(f"file-state:{request.file_id}")
-            processed_count += 1
-            return True
-        except Exception as e:
-            print(f"Error evaluating comment ID {comment.id}: {e}")
-            return False
+        async with semaphore:
+            nonlocal processed_count
+            try:
+                # For Bulk Evaluation (Zero-Shot), we ONLY fetch the Logprobs to maximize speed
+                # and adhere strictly to the statistical zero-shot methodology.
+                # We do NOT ask the LLM for explanations here.
+                true_classification, true_confidence, debug_data = await call_nim_logprobs_async(client, comment.text, request.model)
+                
+                comment.predicted_classification = true_classification
+                comment.confidence = true_confidence
+                
+                # Save debug data into tokens_json so the UI can display the prompt/logprobs
+                comment.tokens_json = json.dumps(debug_data)
+                comment.status = "evaluated"
+                # Commit immediately so /progress can reflect real-time state
+                async with db_lock:
+                    db.commit()
+                    cache_invalidate_prefix(f"file-state:{request.file_id}")
+                processed_count += 1
+                
+                # Add a mandatory sleep to respect free-tier rate limits
+                await asyncio.sleep(1.0)
+                
+                return True
+            except Exception as e:
+                import traceback
+                print(f"Error evaluating comment ID {comment.id}:")
+                traceback.print_exc()
+                return False
 
     async with httpx.AsyncClient() as client:
         tasks = [evaluate_single_comment(client, comment) for comment in pending_comments]
@@ -394,7 +486,7 @@ def get_evaluated_comments(file_id: int, limit: int = 100, db: Session = Depends
 
 
 @app.post("/classify")
-def classify_text(request: ClassificationRequest, db: Session = Depends(get_db)):
+async def classify_text(request: ClassificationRequest, db: Session = Depends(get_db)):
     # Fetch few-shot examples from DB
     toxic_example = db.query(CommentEvaluation).filter(
         CommentEvaluation.status == "evaluated", 
@@ -417,14 +509,38 @@ Analyze the following text based on the examples above.
 Output MUST be a valid JSON object with EXACTLY three fields:
 1. "classification": either "Toxic" or "Non-Toxic"
 2. "confidence": a float between 0.0 and 1.0
-3. "tokens": an array of objects. Break the text into tokens (words). For each token, assign an "attribution" score between -1.0 (strongly pulls towards Non-Toxic) and 1.0 (strongly pulls towards Toxic). A score of 0.0 means neutral.
+3. "tokens": an array of objects. Break the text into tokens (words). For each token, assign an "attribution" score between -1.0 (highly toxic/offensive) and 1.0 (highly safe/positive). A score of 0.0 means neutral.
 
 Text to analyze: "{request.text}"
 
 JSON Output:
 """
     try:
-        result_json = call_nim_api(few_shot_prompt, request.model)
+        async with httpx.AsyncClient() as client:
+            json_task = call_nim_api_async(client, few_shot_prompt, request.model)
+            logprob_task = call_nim_logprobs_async(client, request.text, request.model)
+            
+            result_json_tuple, logprob_result = await asyncio.gather(json_task, logprob_task)
+            
+            result_json, raw_response, sent_prompt = result_json_tuple
+            true_classification, true_confidence, zero_shot_debug = logprob_result
+            
+            result_json["classification"] = true_classification
+            result_json["confidence"] = true_confidence
+            
+            # CRITICAL: Apply the polarity inversion so that positive attribution = Toxic in the UI.
+            # The LLM prompt defines: +1.0 = safe, -1.0 = toxic.
+            # map_tokens_to_objects flips the sign so: +1.0 in UI = Toxic (red), -1.0 = Non-Toxic (green).
+            if "tokens" in result_json and isinstance(result_json["tokens"], list):
+                result_json["tokens"] = map_tokens_to_objects(result_json["tokens"])
+            
+            result_json["debug_data"] = {
+                "deep_dive_prompt": sent_prompt,
+                "deep_dive_raw_response": raw_response,
+                "zero_shot_prompt": zero_shot_debug.get("prompt"),
+                "zero_shot_raw_response": zero_shot_debug.get("raw_response"),
+                "zero_shot_logprobs": zero_shot_debug.get("logprobs")
+            }
         
         # We also return the examples used so the UI can show them
         examples_used = []

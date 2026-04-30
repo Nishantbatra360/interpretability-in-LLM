@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import { Download, RefreshCw, AlertTriangle, CheckCircle, Info, AlertCircle } from 'lucide-react';
+import { SPDEOppChart } from './Charts';
 
 /* ─── helpers ──────────────────────────────────────────── */
 const pct = (v) => (v * 100).toFixed(1) + '%';
@@ -425,6 +426,11 @@ const FairnessMetrics = () => {
             No identity groups met the minimum sample size (n ≥ 5). Evaluate more comments.
           </div>
         ) : (
+          <>
+            {/* Visual bar chart */}
+            <div style={{ padding: '16px', backgroundColor: 'var(--surface-container-low)', borderRadius: '8px', marginBottom: '20px' }}>
+              <SPDEOppChart identities={identities} />
+            </div>
           <table className="metrics-table">
             <thead>
               <tr>
@@ -496,6 +502,7 @@ const FairnessMetrics = () => {
               ))}
             </tbody>
           </table>
+          </>
         )}
       </div>
 
