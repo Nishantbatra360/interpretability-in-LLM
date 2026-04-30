@@ -56,7 +56,13 @@ class CommentEvaluation(Base):
     threat_group            = Column(Float, default=0.0)
 
     # LLM evaluation results
-    status                   = Column(String, default="pending")  # "pending" | "evaluated"
+    status                  = Column(String, default="pending")  # "pending" | "evaluated"
+
+    # Interpretability & Rationales
+    identity_rationale      = Column(Text, nullable=True) # JSON string of rationales for detections
+    toxicity_rationale      = Column(Text, nullable=True) # Qualitative summary for toxicity
+    identity_prompt         = Column(Text, nullable=True) # Raw prompt sent for identity scan
+    identity_response       = Column(Text, nullable=True) # Raw LLM response for identity scan
     predicted_classification = Column(String, nullable=True)       # "Toxic" | "Non-Toxic"
     confidence               = Column(Float, nullable=True)
     tokens_json              = Column(Text, nullable=True)
@@ -82,9 +88,11 @@ def _migrate():
         "jewish":           "REAL",
         "muslim":           "REAL",
         "psychiatric_or_mental_illness": "REAL",
-        "identity_caste_religion": "REAL",
-        "gender_based":            "REAL",
         "threat_group":            "REAL",
+        "identity_rationale":      "TEXT",
+        "toxicity_rationale":      "TEXT",
+        "identity_prompt":         "TEXT",
+        "identity_response":       "TEXT",
     }
     with engine.connect() as conn:
         for col, dtype in new_cols.items():

@@ -6,21 +6,36 @@ import InterpretabilityPanel, { MethodologyBox, ComputedMetricsBox, TopTokenDriv
 import { AttributionBarChart } from './Charts';
 
 const AVAILABLE_MODELS = [
+  { id: 'meta/llama-3.1-8b-instruct', name: 'Llama 3.1 8B (Fastest)' },
   { id: 'meta/llama-3.1-70b-instruct', name: 'Llama 3.1 70B (Recommended)' },
-  { id: 'meta/llama-3.1-8b-instruct', name: 'Llama 3.1 8B (Fast)' },
-  { id: 'meta/llama-3.1-405b-instruct', name: 'Llama 3.1 405B (Heavy)' },
-  { id: 'mistralai/mistral-large-2-instruct', name: 'Mistral Large 2' },
-  { id: 'google/gemma-2-27b-it', name: 'Gemma 2 27B' },
-  { id: 'google/gemma-2-9b-it', name: 'Gemma 2 9B' }
+  { id: 'mistralai/mistral-large-3-675b-instruct-2512', name: 'Mistral Large 3' },
+  { id: 'mistralai/mistral-small-4-119b-2603', name: 'Mistral Small 4' },
+  { id: 'google/gemma-4-31b-it', name: 'Gemma 4 31B (State of the Art)' },
+  { id: 'google/gemma-3-27b-it', name: 'Gemma 3 27B' },
+  { id: 'google/gemma-2-2b-it', name: 'Gemma 2 2B' }
 ];
 
-const ClassificationPanel = () => {
-  const [text, setText] = useState('');
-  const [model, setModel] = useState('meta/llama-3.1-70b-instruct');
+const ClassificationPanel = ({ initialText = '' }) => {
+  const [text, setText] = useState(initialText);
+  const [model, setModel] = useState('meta/llama-3.1-8b-instruct');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showDebug, setShowDebug] = useState(false);
+
+  // Auto-run if text is passed from metrics tab
+  React.useEffect(() => {
+    if (initialText && initialText !== text) {
+      setText(initialText);
+    }
+  }, [initialText]);
+
+  // If text changes from props and we are on this tab, maybe we should auto-classify
+  React.useEffect(() => {
+    if (text && text === initialText && !result && !loading) {
+      handleClassify();
+    }
+  }, [text, initialText]);
 
   const handleClassify = async () => {
     if (!text.trim()) return;

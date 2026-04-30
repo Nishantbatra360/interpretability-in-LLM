@@ -6,20 +6,20 @@ import InterpretabilityPanel from './InterpretabilityPanel';
 import { PredictionDonut, ConfidenceHistogram } from './Charts';
 
 const AVAILABLE_MODELS = [
+  { id: 'meta/llama-3.1-8b-instruct', name: 'Llama 3.1 8B (Fastest)' },
   { id: 'meta/llama-3.1-70b-instruct', name: 'Llama 3.1 70B (Recommended)' },
-  { id: 'meta/llama-3.1-8b-instruct', name: 'Llama 3.1 8B (Fast)' },
-  { id: 'meta/llama-3.1-405b-instruct', name: 'Llama 3.1 405B (Heavy)' },
-  { id: 'mistralai/mistral-large-2-instruct', name: 'Mistral Large 2' },
-  { id: 'google/gemma-2-27b-it', name: 'Gemma 2 27B' },
-  { id: 'google/gemma-2-9b-it', name: 'Gemma 2 9B' }
+  { id: 'mistralai/mistral-large-3-675b-instruct-2512', name: 'Mistral Large 3' },
+  { id: 'mistralai/mistral-small-4-119b-2603', name: 'Mistral Small 4' },
+  { id: 'google/gemma-4-31b-it', name: 'Gemma 4 31B (State of the Art)' },
+  { id: 'google/gemma-3-27b-it', name: 'Gemma 3 27B' },
+  { id: 'google/gemma-2-2b-it', name: 'Gemma 2 2B' }
 ];
 
-const BulkUploadPanel = () => {
+const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setEvaluatingFileId, progress, setProgress }) => {
   const [file, setFile] = useState(null);
   const [uploading, setUploading] = useState(false);
-  const [evaluating, setEvaluating] = useState(false);
   const [batchSize, setBatchSize] = useState(10);
-  const [model, setModel] = useState('meta/llama-3.1-70b-instruct');
+  const [model, setModel] = useState('meta/llama-3.1-8b-instruct');
   
   const [filesList, setFilesList] = useState([]);
   const [selectedFileId, setSelectedFileId] = useState(null);
@@ -30,8 +30,6 @@ const BulkUploadPanel = () => {
   const [message, setMessage] = useState('');
   const [modalData, setModalData] = useState(null);
 
-  // Live progress during evaluation
-  const [progress, setProgress] = useState(null); // { evaluated, pending, batchSize, startEvaluated }
 
   const toggleRow = (id) => {
     setExpandedRows(prev => ({ ...prev, [id]: !prev[id] }));
@@ -97,17 +95,6 @@ const BulkUploadPanel = () => {
     fetchStatus();
   }, [selectedFileId]);
 
-  // Poll /progress (lightweight) every 1.5s while a batch is running
-  useEffect(() => {
-    if (!evaluating || !selectedFileId) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await axios.get(`http://127.0.0.1:8004/progress/${selectedFileId}`);
-        setProgress(prev => prev ? { ...prev, evaluated: res.data.evaluated, pending: res.data.pending } : prev);
-      } catch (e) { /* silent */ }
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [evaluating, selectedFileId]);
 
   const handleUpload = async () => {
     if (!file) return;
@@ -131,25 +118,53 @@ const BulkUploadPanel = () => {
     }
   };
 
-  const handleEvaluate = async () => {
-    if (!selectedFileId) return;
-    setEvaluating(true);
+  const handleEvaluate = () => {
+    if (!selectedFileId || isEvaluating) return;
+    
+    setIsEvaluating(true);
+    setEvaluatingFileId(selectedFileId);
     setMessage('');
-    // Capture baseline so we know how many THIS batch will evaluate
-    setProgress({ evaluated: dbStatus.evaluated, pending: dbStatus.pending, batchSize: parseInt(batchSize), startEvaluated: dbStatus.evaluated });
-    try {
-      const res = await axios.post('http://127.0.0.1:8004/evaluate-batch', { file_id: selectedFileId, batch_size: parseInt(batchSize), model: model });
-      setMessage(res.data.message);
-      if (res.data.pending !== undefined) {
-        setDbStatus({ pending: res.data.pending, evaluated: res.data.evaluated });
+    
+    // Initial baseline for progress
+    setProgress({ 
+      evaluated: dbStatus.evaluated, 
+      pending: dbStatus.pending, 
+      batchSize: parseInt(batchSize), 
+      startEvaluated: dbStatus.evaluated 
+    });
+
+    const eventSource = new EventSource(`http://127.0.0.1:8004/stream-evaluate/${selectedFileId}?batch_size=${batchSize}&model=${model}`);
+
+    eventSource.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'start') {
+        // Updated total from server
+      } else if (data.type === 'progress') {
+        setProgress(prev => prev ? { 
+          ...prev, 
+          evaluated: data.processed + prev.startEvaluated, 
+          pending: data.total - data.processed 
+        } : prev);
+        // Refresh the table live
+        fetchStatus();
+      } else if (data.type === 'complete' || data.done) {
+        eventSource.close();
+        setIsEvaluating(false);
+        setEvaluatingFileId(null);
+        setProgress(null);
+        fetchStatus();
       }
-    } catch (err) {
-      setMessage('Evaluation failed: ' + (err.response?.data?.detail || err.message));
-    } finally {
-      setEvaluating(false);
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('Streaming evaluation failed:', err);
+      eventSource.close();
+      setIsEvaluating(false);
+      setEvaluatingFileId(null);
       setProgress(null);
-      await fetchStatus(); // load newly evaluated comments
-    }
+      setMessage('Evaluation stream interrupted.');
+      fetchStatus();
+    };
   };
   
   const handleDeleteFile = async (id) => {
@@ -202,7 +217,7 @@ const BulkUploadPanel = () => {
             </div>
           )}
           
-          {message && !uploading && !evaluating && <div style={{ marginTop: '16px', fontSize: '14px', color: 'var(--primary)' }}>{message}</div>}
+          {message && !uploading && !isEvaluating && <div style={{ marginTop: '16px', fontSize: '14px', color: 'var(--primary)' }}>{message}</div>}
         </div>
 
         {selectedFileId && (
@@ -235,7 +250,7 @@ const BulkUploadPanel = () => {
                   value={batchSize} 
                   onChange={(e) => setBatchSize(Math.min(35, Math.max(1, parseInt(e.target.value) || 1)))}
                   style={{ width: '100%', padding: '8px', border: '1px solid var(--outline-variant)', borderRadius: '4px' }}
-                  disabled={evaluating}
+                  disabled={isEvaluating}
                 />
               </div>
               <div style={{ flex: 1 }}>
@@ -244,7 +259,7 @@ const BulkUploadPanel = () => {
                   value={model} 
                   onChange={(e) => setModel(e.target.value)}
                   style={{ width: '100%', padding: '8px', border: '1px solid var(--outline-variant)', borderRadius: '4px' }}
-                  disabled={evaluating}
+                  disabled={isEvaluating}
                 >
                   {AVAILABLE_MODELS.map(m => (
                     <option key={m.id} value={m.id}>{m.name}</option>
@@ -255,17 +270,20 @@ const BulkUploadPanel = () => {
                 className="btn" 
                 style={{ backgroundColor: 'var(--inverse-surface)', color: 'var(--inverse-on-surface)' }}
                 onClick={handleEvaluate}
-                disabled={evaluating || dbStatus.pending === 0}
+                disabled={isEvaluating || dbStatus.pending === 0}
               >
-                {evaluating ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-                {evaluating ? 'Evaluating...' : 'Run Batch Analysis'}
+                {isEvaluating ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+                {isEvaluating ? 'Evaluating...' : 'Run Batch Analysis'}
               </button>
             </div>
             
-            {evaluating && progress && (() => {
-              const batchTotal   = progress.batchSize;
-              const doneInBatch  = Math.max(0, progress.evaluated - progress.startEvaluated);
-              const pct          = batchTotal > 0 ? Math.round((doneInBatch / batchTotal) * 100) : 0;
+            {isEvaluating && progress && (() => {
+              const batchTotal   = (progress?.batchSize) || 10;
+              const currentEval  = (progress?.evaluated) || 0;
+              const startEval    = (progress?.startEvaluated) || 0;
+              const doneInBatch  = Math.max(0, currentEval - startEval);
+              const pct          = batchTotal > 0 ? Math.min(100, Math.round((doneInBatch / batchTotal) * 100)) : 0;
+              const pendingTotal = (progress?.pending) || 0;
               return (
                 <div style={{ marginTop: '16px', padding: '14px 16px', backgroundColor: 'rgba(0,74,198,0.05)', border: '1px solid var(--primary)', borderRadius: '6px' }}>
                   {/* Header row */}
@@ -452,13 +470,13 @@ const BulkUploadPanel = () => {
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   try {
-                                    setModalData(JSON.parse(comment.tokens_json || '{}'));
+                                    setModalData(comment);
                                   } catch (err) {
                                     setModalData({ error: 'No debug data available.' });
                                   }
                                 }}
                               >
-                                <Code size={14} /> Logprobs
+                                <Code size={14} /> Raw LLM
                               </button>
                             </td>
                           </tr>
@@ -479,32 +497,63 @@ const BulkUploadPanel = () => {
       <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', justifyContent: 'center', alignItems: 'center' }} onClick={() => setModalData(null)}>
         <div style={{ backgroundColor: 'var(--surface)', padding: '24px', borderRadius: '8px', width: '80%', maxWidth: '800px', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }} onClick={e => e.stopPropagation()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-            <h2 style={{ margin: 0, fontSize: '18px' }}>Zero-Shot API Request & Logprobs</h2>
+            <h2 style={{ margin: 0, fontSize: '18px' }}>Technical Audit: Raw LLM Data</h2>
             <button onClick={() => setModalData(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--on-surface-variant)' }}><X size={20} /></button>
           </div>
           
           <div style={{ overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <div>
-              <h3 style={{ fontSize: '14px', color: 'var(--on-surface-variant)', marginBottom: '8px' }}>Raw Prompt Sent:</h3>
-              <pre style={{ backgroundColor: 'var(--surface-container-low)', color: 'var(--on-surface)', padding: '16px', borderRadius: '6px', whiteSpace: 'pre-wrap', fontSize: '13px', border: '1px solid var(--outline-variant)', margin: 0 }}>
-                {modalData.prompt || 'N/A'}
-              </pre>
+             {/* LLM Technical Audit Trail */}
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ fontSize: '13px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--on-surface-variant)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <Code size={14} /> 
+              {modalData.tokens_json && JSON.parse(modalData.tokens_json).raw_response 
+                ? 'Unified Inference: Raw JSON Audit Log' 
+                : 'Technical Audit: Raw LLM Data'}
             </div>
             
-            <div>
-              <h3 style={{ fontSize: '14px', color: 'var(--on-surface-variant)', marginBottom: '8px' }}>Raw LLM Response:</h3>
-              <pre style={{ backgroundColor: '#1e1e1e', color: '#00ff88', padding: '16px', borderRadius: '6px', fontSize: '20px', fontFamily: 'var(--font-mono)', margin: 0 }}>
-                {modalData.raw_response || 'N/A'}
-              </pre>
+            <div style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginBottom: '12px', fontStyle: 'italic' }}>
+              {modalData.tokens_json && JSON.parse(modalData.tokens_json).raw_response 
+                ? 'This log shows the model\'s unified classification and identity detection in one pass. Mathematical token attribution is available in the Deep Dive tab.' 
+                : 'This view shows the raw API data received from the model. Mathematical token attribution is available in the Deep Dive tab.'}
             </div>
 
-            <div>
-              <h3 style={{ fontSize: '14px', color: 'var(--on-surface-variant)', marginBottom: '8px' }}>Logprobs (Used for Mathematical Scoring):</h3>
-              <pre style={{ backgroundColor: '#1e1e1e', color: '#d4d4d4', padding: '16px', borderRadius: '6px', overflowX: 'auto', fontSize: '13px', fontFamily: 'var(--font-mono)', margin: 0 }}>
-                {JSON.stringify(modalData.logprobs || modalData, null, 2)}
+            <div style={{ backgroundColor: 'var(--surface-container-highest)', padding: '16px', borderRadius: '8px', border: '1px solid var(--outline-variant)' }}>
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--primary)', marginBottom: '4px', textTransform: 'uppercase' }}>Raw Prompt Sent:</div>
+              <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '12px', color: 'var(--on-surface)', fontFamily: 'var(--font-mono)', lineHeight: '1.5', maxHeight: '200px', overflowY: 'auto', marginBottom: '16px' }}>
+                {modalData.identity_prompt || (modalData.tokens_json && JSON.parse(modalData.tokens_json).prompt) || modalData.prompt || 'N/A'}
+              </pre>
+
+              <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--primary)', marginBottom: '4px', textTransform: 'uppercase' }}>Raw LLM Response:</div>
+              <pre style={{ 
+                margin: 0, 
+                whiteSpace: 'pre-wrap', 
+                fontSize: '12px', 
+                color: '#4CAF50', 
+                backgroundColor: '#1a1c1e', 
+                padding: '12px', 
+                borderRadius: '4px', 
+                fontFamily: 'var(--font-mono)', 
+                lineHeight: '1.5', 
+                maxHeight: '300px', 
+                overflowY: 'auto' 
+              }}>
+                {(() => {
+                  // Strategy: Find the most "raw" content available
+                  if (modalData.identity_response) return modalData.identity_response;
+                  
+                  const tokens = modalData.tokens_json ? JSON.parse(modalData.tokens_json) : null;
+                  if (tokens?.raw_response) return tokens.raw_response;
+                  if (modalData.raw_response) return modalData.raw_response;
+                  
+                  // Fallback to the full tokens_json if it's all we have
+                  if (modalData.tokens_json) return modalData.tokens_json;
+                  
+                  return 'No raw response logs found for this record.';
+                })()}
               </pre>
             </div>
           </div>
+        </div>
         </div>
       </div>
     )}

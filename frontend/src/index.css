@@ -23,6 +23,12 @@
   --on-secondary: #ffffff;
   --tertiary: #943700;
   --on-tertiary: #ffffff;
+  --toxic-container: #ffebee;
+  --non-toxic-container: #e8f5e9;
+  --tertiary-container: #fff3e0;
+  --on-toxic-container: #c62828;
+  --on-non-toxic-container: #2e7d32;
+  --on-tertiary-container: #ef6c00;
   --error: #ba1a1a;
   --on-error: #ffffff;
   --error-container: #ffdad6;
