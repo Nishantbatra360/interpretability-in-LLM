@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Download, RefreshCw, AlertTriangle, CheckCircle, Info, 
   ChevronDown, ChevronUp, ExternalLink, ShieldCheck, 
-  TrendingUp, TrendingDown, Target, Database, Activity, AlertCircle 
+  TrendingUp, TrendingDown, Target, Database, Activity, AlertCircle, FileText, ShieldAlert
 } from 'lucide-react';
 import { SPDEOppChart, TokenHeatmap } from './Charts';
 import api, { IS_DEMO } from '../api';
