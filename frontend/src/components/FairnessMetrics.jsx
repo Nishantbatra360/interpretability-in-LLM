@@ -38,23 +38,23 @@ const FormulaLegend = () => (
     </div>
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '24px' }}>
       <div>
-        <div style={{ fontWeight: '600', color: 'var(--on-surface-variant)', marginBottom: '4px' }}>Statistical Parity Difference (SPD)</div>
+        <div style={{ fontWeight: '600', color: 'var(--on-surface-variant)', marginBottom: '4px' }}>Demographic Parity (SPD & Ratio)</div>
         <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--primary)' }}>
-          SPD = P(Ŷ=1 | A=1) − P(Ŷ=1 | A=0)
+          Difference = SR(A=1) − SR(A=0) | Ratio = min(SR)/max(SR)
         </code>
         <div style={{ color: 'var(--on-surface-variant)', marginTop: '4px', lineHeight: 1.5 }}>
-          Difference in <strong>positive prediction rate</strong> between the identity-present group (A=1)<br/>
-          and identity-absent group (A=0). Zero = perfectly equal treatment.
+          Compares <strong>Selection Rate (SR)</strong> — how often the model predicts Toxic.<br/>
+          Ideal: Difference = 0, Ratio = 1.
         </div>
       </div>
       <div>
-        <div style={{ fontWeight: '600', color: 'var(--on-surface-variant)', marginBottom: '4px' }}>Equal Opportunity Difference (EOpp)</div>
+        <div style={{ fontWeight: '600', color: 'var(--on-surface-variant)', marginBottom: '4px' }}>Equal Opportunity (EOpp)</div>
         <code style={{ fontFamily: 'var(--font-mono)', color: 'var(--primary)' }}>
           EOpp = TPR(A=1) − TPR(A=0)
         </code>
         <div style={{ color: 'var(--on-surface-variant)', marginTop: '4px', lineHeight: 1.5 }}>
-          Difference in <strong>True Positive Rate</strong> between groups. Non-zero values indicate<br/>
-          unequal opportunity to be correctly identified as toxic.
+          Difference in <strong>True Positive Rate</strong>. Measures if the model is<br/>
+          equally good at catching toxic content across groups.
         </div>
       </div>
     </div>
@@ -104,23 +104,30 @@ const METRIC_INFO = {
     vars: 'FP = False Positive, TN = True Negative',
     caveat: 'Used together with TPR in ROC analysis.',
   },
-  'Pos. Pred. Rate': {
+  'Selection Rate': {
     formula: '(TP + FP) / Total',
     plain: 'Fraction of all comments the model predicted as Toxic, regardless of ground truth.',
     ideal: 'Should reflect true base rate of toxicity in data.',
     vars: 'TP = True Positive, FP = False Positive',
-    caveat: 'Used in SPD: SPD = PPR(A=1) − PPR(A=0). Valid even without ground-truth labels.',
+    caveat: 'Used in Demographic Parity: comparing Selection Rate across groups.',
   },
   SPD: {
-    formula: 'P(Ŷ=1 | A=1) − P(Ŷ=1 | A=0)',
-    plain: 'Difference in Toxic prediction rate between the identity-present and identity-absent group.',
+    formula: 'SelectionRate(A=1) − SelectionRate(A=0)',
+    plain: 'Demographic Parity Difference. Difference in Toxic prediction rate between groups.',
     ideal: 'Ideal = 0. |SPD| > 0.10 is considered high disparity.',
-    vars: 'A=1: comments mentioning this identity. A=0: comments not mentioning it.',
+    vars: 'A=1: identity-present. A=0: identity-absent.',
     caveat: 'Positive SPD means the model predicts Toxic more often for the identity-present group.',
+  },
+  'Selection Ratio': {
+    formula: 'min(SR_A=1, SR_A=0) / max(SR_A=1, SR_A=0)',
+    plain: 'Demographic Parity Ratio. Closer to 1.0 means more equal selection rates.',
+    ideal: 'Ideal = 1.0. Values below 0.8 (Four-Fifths Rule) indicate potential bias.',
+    vars: 'SR = Selection Rate',
+    caveat: 'A ratio of 0.5 means one group is twice as likely to be flagged as the other.',
   },
   EOpp: {
     formula: 'TPR(A=1) − TPR(A=0)',
-    plain: 'Difference in True Positive Rate between identity subgroups.',
+    plain: 'Equal Opportunity Difference. Difference in True Positive Rate between subgroups.',
     ideal: 'Ideal = 0. Non-zero means unequal opportunity to be correctly classified.',
     vars: 'TPR = True Positive Rate = TP / (TP + FN)',
     caveat: 'Negative EOpp means the model is worse at catching actual toxic comments from the A=1 group.',
@@ -257,6 +264,7 @@ const FairnessMetrics = () => {
   const [selectedFileId, setSelectedFileId] = useState('');
   const [loading, setLoading]           = useState(false);
   const [expandedRows, setExpandedRows] = useState({});
+  const [scanning, setScanning]         = useState(false);
 
   /* Fetch files once on mount */
   useEffect(() => {
@@ -312,6 +320,18 @@ const FairnessMetrics = () => {
 
   const toggleRow = (name) => setExpandedRows(prev => ({ ...prev, [name]: !prev[name] }));
 
+  const handleScanIdentities = async () => {
+    setScanning(true);
+    try {
+      await axios.post(`http://127.0.0.1:8004/scan-identities/${selectedFileId}`);
+      fetchMetrics();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setScanning(false);
+    }
+  };
+
   /* ── Render states ── */
   if (loading) return (
     <div className="card" style={{ padding: '64px 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -331,22 +351,89 @@ const FairnessMetrics = () => {
     </div>
   );
 
-  if (metrics.error) return (
-    <div className="card">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--toxic)', marginBottom: '8px' }}>
-        <AlertTriangle size={18} /> <strong>No Data Available</strong>
-      </div>
-      <p style={{ color: 'var(--on-surface-variant)', fontSize: '14px' }}>
-        {metrics.error} Please go to the <strong>Bulk Data Ingestion</strong> tab to upload and evaluate comments first.
-      </p>
-    </div>
-  );
-
-  const { overall, identities, worst_case } = metrics;
+  const { overall, identities, worst_case, diagnostics } = metrics;
   const hasLabels = metrics.has_labels;
+
+  const DiagnosticsPanel = () => {
+    const counts = diagnostics?.group_counts || diagnostics?.counts || {};
+    const minReq = diagnostics?.min_group_size || diagnostics?.min_required || 3;
+    
+    // Groups that exist but are below threshold
+    const underRepresented = Object.entries(counts)
+      .filter(([name, n]) => n > 0 && n < minReq)
+      .map(([name]) => name);
+
+    // Groups that have 0 detections
+    const missing = Object.entries(counts)
+      .filter(([name, n]) => n === 0)
+      .map(([name]) => name);
+
+    return (
+      <div className="card" style={{ padding: '20px', backgroundColor: 'var(--surface-container-low)', border: '1px solid var(--outline-variant)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '16px' }}>
+          <div>
+            <div style={{ fontSize: '16px', fontWeight: '700', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <Info size={18} style={{ color: 'var(--primary)' }} />
+              Data Coverage & Diagnostics
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--on-surface-variant)' }}>
+              Tracking detections across {Object.keys(counts).length} identity categories in {overall.total} evaluated comments.
+            </div>
+          </div>
+          <button 
+            className="btn btn-primary" 
+            onClick={handleScanIdentities}
+            disabled={scanning || overall.total === 0}
+            style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+          >
+            {scanning ? <RefreshCw size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+            {scanning ? 'Scanning...' : '✨ Infer Missing Identities (LLM Scan)'}
+          </button>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div style={{ backgroundColor: 'var(--surface-container-lowest)', padding: '12px', borderRadius: '8px' }}>
+            <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--tertiary)', marginBottom: '8px', textTransform: 'uppercase' }}>
+              ⚠ Insufficient Data ({minReq} required)
+            </div>
+            {underRepresented.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {underRepresented.map(name => (
+                  <span key={name} style={{ padding: '4px 8px', borderRadius: '4px', backgroundColor: 'var(--tertiary-container)', color: 'var(--on-tertiary-container)', fontSize: '11px' }}>
+                    {name} ({counts[name]})
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: '12px', fontStyle: 'italic', color: 'var(--on-surface-variant)' }}>No groups in this state.</div>
+            )}
+          </div>
+
+          <div style={{ backgroundColor: 'var(--surface-container-lowest)', padding: '12px', borderRadius: '8px' }}>
+            <div style={{ fontSize: '12px', fontWeight: '700', color: 'var(--on-surface-variant)', marginBottom: '8px', textTransform: 'uppercase' }}>
+              ⚪ No Detections Found
+            </div>
+            {missing.length > 0 ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {missing.map(name => (
+                  <span key={name} style={{ padding: '4px 8px', borderRadius: '4px', backgroundColor: 'var(--surface-container)', color: 'var(--on-surface-variant)', fontSize: '11px' }}>
+                    {name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <div style={{ fontSize: '12px', fontStyle: 'italic', color: 'var(--on-surface-variant)' }}>All groups have at least one detection.</div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+      
+      <DiagnosticsPanel />
 
       {/* Controls */}
       <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -392,23 +479,38 @@ const FairnessMetrics = () => {
       {/* Formula Legend */}
       <FormulaLegend />
 
-      {/* Overall Performance */}
-      <div className="card">
-        <div className="card-header">
-          <h2>Overall Classification Performance</h2>
-          <p style={{ color: 'var(--on-surface-variant)', fontSize: '13px', marginTop: '4px' }}>
-            Across all {overall.total} evaluated comments
+      {/* No Data Warning */}
+      {overall.total === 0 && (
+        <div className="card" style={{ padding: '24px', border: '2px dashed var(--outline-variant)', textAlign: 'center', backgroundColor: 'var(--surface-container-low)' }}>
+          <div style={{ display: 'inline-flex', padding: '12px', borderRadius: '50%', backgroundColor: 'var(--surface-container)', color: 'var(--tertiary)', marginBottom: '16px' }}>
+            <AlertTriangle size={32} />
+          </div>
+          <h3 style={{ marginBottom: '8px' }}>No Evaluated Comments Found</h3>
+          <p style={{ color: 'var(--on-surface-variant)', fontSize: '14px', maxWidth: '500px', margin: '0 auto 16px' }}>
+            The selected dataset has 0 evaluations. Please go to the <strong>Bulk Evaluation</strong> tab and run a "Zero-Shot Classification" for this dataset first.
           </p>
         </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
-          <StatCard label="Accuracy" value={overall.accuracy} color="var(--primary)" unavailable={!hasLabels} />
-          <StatCard label="F1 Score" value={overall.f1} color="var(--primary)" unavailable={!hasLabels} />
-          <StatCard label="Precision" value={overall.precision} color="var(--secondary)" description="TP / (TP + FP)" unavailable={!hasLabels} />
-          <StatCard label="Recall / TPR" value={overall.recall} color="var(--secondary)" description="TP / (TP + FN)" unavailable={!hasLabels} />
-          <StatCard label="FPR" value={overall.fpr} color="var(--tertiary)" description="FP / (FP + TN)" unavailable={!hasLabels} />
-          <StatCard label="Pos. Pred. Rate" value={overall.ppr} color={hasLabels ? 'var(--on-surface-variant)' : 'var(--primary)'} description="(TP + FP) / Total" />
-        </div>
-      </div>
+      )}
+
+      {overall.total > 0 && (
+        <>
+          {/* Overall Performance */}
+          <div className="card">
+            <div className="card-header">
+              <h2>Overall Classification Performance</h2>
+              <p style={{ color: 'var(--on-surface-variant)', fontSize: '13px', marginTop: '4px' }}>
+                Across all {overall.total} evaluated comments
+              </p>
+            </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px' }}>
+              <StatCard label="Accuracy" value={overall.accuracy} color="var(--primary)" unavailable={!hasLabels} />
+              <StatCard label="F1 Score" value={overall.f1} color="var(--primary)" unavailable={!hasLabels} />
+              <StatCard label="Precision" value={overall.precision} color="var(--secondary)" description="TP / (TP + FP)" unavailable={!hasLabels} />
+              <StatCard label="Recall / TPR" value={overall.recall} color="var(--secondary)" description="TP / (TP + FN)" unavailable={!hasLabels} />
+              <StatCard label="FPR" value={overall.fpr} color="var(--tertiary)" description="FP / (FP + TN)" unavailable={!hasLabels} />
+              <StatCard label="Selection Rate" value={overall.selection_rate} color={hasLabels ? 'var(--on-surface-variant)' : 'var(--primary)'} description="(TP + FP) / Total" />
+            </div>
+          </div>
 
       {/* Disparity Table */}
       <div className="card">
@@ -422,119 +524,200 @@ const FairnessMetrics = () => {
         </div>
 
         {identities.length === 0 ? (
-          <div style={{ padding: '24px', textAlign: 'center', color: 'var(--on-surface-variant)' }}>
-            No identity groups met the minimum sample size (n ≥ 5). Evaluate more comments.
-          </div>
-        ) : (
-          <>
-            {/* Visual bar chart */}
-            <div style={{ padding: '16px', backgroundColor: 'var(--surface-container-low)', borderRadius: '8px', marginBottom: '20px' }}>
-              <SPDEOppChart identities={identities} />
+          <div style={{ padding: '32px 24px', textAlign: 'center' }}>
+            <div style={{ display: 'inline-flex', padding: '12px', borderRadius: '50%', backgroundColor: 'var(--surface-container)', color: 'var(--on-surface-variant)', marginBottom: '16px' }}>
+              <AlertCircle size={32} />
             </div>
-          <table className="metrics-table">
-            <thead>
-              <tr>
-                <th>Identity</th>
-                <th>SPD = P(Ŷ=1|A=1) − P(Ŷ=1|A=0)</th>
-                <th>Severity</th>
-                <th>EOpp = TPR(A=1) − TPR(A=0)</th>
-                <th>Severity</th>
-                <th>A=1 (n)</th>
-                <th>A=0 (n)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {identities.map((row) => (
-                <React.Fragment key={row.name}>
-                  <tr
-                    onClick={() => toggleRow(row.name)}
-                    style={{ cursor: 'pointer', backgroundColor: expandedRows[row.name] ? 'var(--surface-container-low)' : undefined }}
-                  >
-                    <td style={{ fontFamily: 'var(--font-sans)', fontWeight: '600' }}>
-                      {expandedRows[row.name] ? '▼' : '▶'} {row.name}
-                    </td>
-                    <td style={{ color: severityColor(Math.abs(row.spd)), fontWeight: '700' }}>{sgn(row.spd)}</td>
-                    <td><SeverityBadge value={row.spd} /></td>
-                    <td style={{ color: severityColor(Math.abs(row.eopp)), fontWeight: '700' }}>{sgn(row.eopp)}</td>
-                    <td><SeverityBadge value={row.eopp} /></td>
-                    <td style={{ color: 'var(--on-surface-variant)' }}>{row.a1.n}</td>
-                    <td style={{ color: 'var(--on-surface-variant)' }}>{row.a0.n}</td>
-                  </tr>
-
-                  {expandedRows[row.name] && (
-                    <tr>
-                      <td colSpan="7" style={{ padding: '0 0 0 24px', backgroundColor: 'var(--surface-container-lowest)' }}>
-                        <div style={{ padding: '16px 0 16px 0', fontSize: '13px' }}>
-                          <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--on-surface-variant)' }}>
-                            Subgroup Breakdown for <strong>{row.name}</strong>
-                          </div>
-                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                            <thead>
-                              <tr style={{ backgroundColor: 'var(--surface-container)' }}>
-                                <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>Subgroup</th>
-                                <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>n</th>
-                                <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>Accuracy</th>
-                                <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>F1</th>
-                                <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>TPR (Recall)</th>
-                                <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>FPR</th>
-                                <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>PPR P(Ŷ=1)</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              <GroupRow label={`${row.name} = 1 (Identity Present)`} m={row.a1} />
-                              <GroupRow label={`${row.name} = 0 (Identity Absent)`} m={row.a0} />
-                              <tr style={{ borderTop: '2px solid var(--outline-variant)', fontWeight: '600', backgroundColor: 'var(--surface-container-low)' }}>
-                                <td style={{ padding: '8px 12px', color: 'var(--primary)' }}>Disparity (A=1 − A=0)</td>
-                                <td style={{ padding: '8px 12px' }}>—</td>
-                                <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: severityColor(Math.abs(row.a1.accuracy - row.a0.accuracy)) }}>{sgn(row.a1.accuracy - row.a0.accuracy)}</td>
-                                <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: severityColor(Math.abs(row.a1.f1 - row.a0.f1)) }}>{sgn(row.a1.f1 - row.a0.f1)}</td>
-                                <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: severityColor(Math.abs(row.eopp)) }}>{sgn(row.eopp)} ← EOpp</td>
-                                <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: severityColor(Math.abs(row.a1.fpr - row.a0.fpr)) }}>{sgn(row.a1.fpr - row.a0.fpr)}</td>
-                                <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: severityColor(Math.abs(row.spd)) }}>{sgn(row.spd)} ← SPD</td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-          </>
-        )}
-      </div>
-
-      {/* Worst-Case Summary */}
-      <div className="card">
-        <div className="card-header">
-          <h2>Worst-Case Summary</h2>
-          <p style={{ color: 'var(--on-surface-variant)', fontSize: '13px', marginTop: '4px' }}>
-            Most adverse group-level behavior across all identities (per §1.4.3)
-          </p>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
-          {[
-            { label: 'Max |SPD|', identity: worst_case.max_spd.identity, value: worst_case.max_spd.value, desc: 'Largest positive prediction rate gap' },
-            { label: 'Max |EOpp|', identity: worst_case.max_eopp.identity, value: worst_case.max_eopp.value, desc: 'Largest true positive rate gap' },
-            { label: 'Worst Subgroup Accuracy', identity: worst_case.worst_accuracy.identity, value: worst_case.worst_accuracy.value, desc: `Subgroup: ${worst_case.worst_accuracy.subgroup || '—'}`, isPercent: true },
-            { label: 'Worst Subgroup F1', identity: worst_case.worst_f1.identity, value: worst_case.worst_f1.value, desc: `Subgroup: ${worst_case.worst_f1.subgroup || '—'}`, isPercent: true },
-          ].map((item, i) => (
-            <div key={i} style={{
-              padding: '16px', borderRadius: '8px', backgroundColor: 'var(--surface-container)',
-              border: `2px solid ${severityColor(Math.abs(item.value))}40`
-            }}>
-              <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--on-surface-variant)', marginBottom: '4px' }}>{item.label}</div>
-              <div style={{ fontSize: '22px', fontWeight: '700', color: severityColor(Math.abs(item.value)) }}>
-                {item.isPercent ? pct(item.value) : sgn(item.value)}
+            <h3 style={{ marginBottom: '8px' }}>No identity groups met the sample size requirements</h3>
+            <p style={{ color: 'var(--on-surface-variant)', fontSize: '14px', maxWidth: '500px', margin: '0 auto 24px' }}>
+              To ensure statistical stability, disparity metrics (SPD/EOpp) are only calculated for groups with at least <strong>{metrics.diagnostics?.min_group_size || 3}</strong> samples where the identity is present (A=1) and {metrics.diagnostics?.min_group_size || 3} where it is absent (A=0).
+            </p>
+            
+            {metrics.diagnostics?.counts && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', justifyContent: 'center', marginBottom: '24px' }}>
+                {Object.entries(metrics.diagnostics.counts).map(([name, count]) => (
+                  <div key={name} style={{ 
+                    padding: '6px 12px', borderRadius: '4px', fontSize: '12px',
+                    backgroundColor: count > 0 ? 'var(--primary-container)' : 'var(--surface-container)',
+                    color: count > 0 ? 'var(--on-primary-container)' : 'var(--on-surface-variant)',
+                    border: count > 0 ? '1px solid var(--primary)' : '1px solid var(--outline-variant)',
+                    opacity: count > 0 ? 1 : 0.6
+                  }}>
+                    {name}: <strong>{count}</strong> samples
+                  </div>
+                ))}
               </div>
-              <div style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: '600', marginTop: '2px' }}>{item.identity}</div>
-              <div style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginTop: '2px' }}>{item.desc}</div>
+            )}
+
+            <div style={{ textAlign: 'left', backgroundColor: 'var(--surface-container-lowest)', padding: '16px', borderRadius: '8px', border: '1px solid var(--outline-variant)', fontSize: '13px' }}>
+              <div style={{ fontWeight: '700', marginBottom: '8px' }}>How to fix this:</div>
+              <ul style={{ paddingLeft: '20px', color: 'var(--on-surface-variant)', marginBottom: '16px' }}>
+                <li>Ensure your CSV contains identity columns like <code>male</code>, <code>female</code>, <code>black</code>, <code>white</code>, <code>asian</code>, <code>latino</code>, <code>christian</code>, <code>jewish</code>, or <code>muslim</code>.</li>
+                <li>Verify values are <code>1.0</code> (present) or <code>0.0</code> (absent).</li>
+                <li>Evaluate more comments — currently only {overall.total} evaluated comments are being analyzed.</li>
+              </ul>
+              
+              <div style={{ borderTop: '1px solid var(--outline-variant)', paddingTop: '16px', textAlign: 'center' }}>
+                <p style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginBottom: '12px' }}>
+                  Missing identity labels in your CSV? We can use the LLM to scan your {overall.total} comments and infer mentioned identities.
+                </p>
+                <button 
+                  className="btn btn-primary" 
+                  onClick={handleScanIdentities}
+                  disabled={scanning || overall.total === 0}
+                  style={{ display: 'flex', alignItems: 'center', gap: '8px', margin: '0 auto' }}
+                >
+                  {scanning ? <RefreshCw size={14} className="animate-spin" /> : <Info size={14} />}
+                  {scanning ? 'Scanning Comments...' : '✨ Infer Missing Identities (LLM Scan)'}
+                </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Visual bar chart */}
+                <div style={{ padding: '16px', backgroundColor: 'var(--surface-container-low)', borderRadius: '8px', marginBottom: '20px' }}>
+                  <SPDEOppChart identities={identities} />
+                </div>
+              <table className="metrics-table">
+                <thead>
+                  <tr>
+                    <th>Identity</th>
+                    <th>Selection Rate Diff (SPD)</th>
+                    <th>Selection Rate Ratio</th>
+                    <th>TPR Diff (EOpp)</th>
+                    <th>FPR Diff</th>
+                    <th>A=1 (n)</th>
+                    <th>A=0 (n)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {identities.map((row) => (
+                    <React.Fragment key={row.name}>
+                      <tr
+                        onClick={() => toggleRow(row.name)}
+                        style={{ cursor: 'pointer', backgroundColor: expandedRows[row.name] ? 'var(--surface-container-low)' : undefined }}
+                      >
+                        <td style={{ fontFamily: 'var(--font-sans)', fontWeight: '600' }}>
+                          {expandedRows[row.name] ? '▼' : '▶'} {row.name}
+                        </td>
+                        <td style={{ color: severityColor(Math.abs(row.spd)), fontWeight: '700' }}>{sgn(row.spd)}</td>
+                        <td style={{ fontWeight: '700' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            {row.selection_rate_ratio.toFixed(2)}
+                            <SeverityBadge value={1.0 - row.selection_rate_ratio} />
+                          </div>
+                        </td>
+                        <td style={{ color: severityColor(Math.abs(row.eopp)), fontWeight: '700' }}>{sgn(row.eopp)}</td>
+                        <td style={{ color: severityColor(Math.abs(row.fpr_diff)) }}>{sgn(row.fpr_diff)}</td>
+                        <td style={{ color: 'var(--on-surface-variant)' }}>{row.a1.n}</td>
+                        <td style={{ color: 'var(--on-surface-variant)' }}>{row.a0.n}</td>
+                      </tr>
+
+                      {expandedRows[row.name] && (
+                        <tr>
+                          <td colSpan="7" style={{ padding: '0 0 0 24px', backgroundColor: 'var(--surface-container-lowest)' }}>
+                            <div style={{ padding: '16px 0 16px 0', fontSize: '13px' }}>
+                              <div style={{ fontWeight: '600', marginBottom: '8px', color: 'var(--on-surface-variant)' }}>
+                                Subgroup Breakdown for <strong>{row.name}</strong>
+                              </div>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', marginBottom: '16px' }}>
+                                <thead>
+                                  <tr style={{ backgroundColor: 'var(--surface-container)' }}>
+                                    <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>Subgroup</th>
+                                    <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>n</th>
+                                    <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>Accuracy</th>
+                                    <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>F1</th>
+                                    <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>TPR (Recall)</th>
+                                    <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>FPR</th>
+                                    <th style={{ padding: '6px 12px', textAlign: 'left', color: 'var(--on-surface-variant)' }}>Selection Rate</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  <GroupRow label={`${row.name} = 1`} m={row.a1} />
+                                  <GroupRow label={`${row.name} = 0`} m={row.a0} />
+                                  <tr style={{ borderTop: '2px solid var(--outline-variant)', fontWeight: '600', backgroundColor: 'var(--surface-container-low)' }}>
+                                    <td style={{ padding: '8px 12px', color: 'var(--primary)' }}>Disparity (A=1 − A=0)</td>
+                                    <td style={{ padding: '8px 12px' }}>—</td>
+                                    <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: severityColor(Math.abs(row.a1.accuracy - row.a0.accuracy)) }}>{sgn(row.a1.accuracy - row.a0.accuracy)}</td>
+                                    <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: severityColor(Math.abs(row.a1.f1 - row.a0.f1)) }}>{sgn(row.a1.f1 - row.a0.f1)}</td>
+                                    <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: severityColor(Math.abs(row.eopp)) }}>{sgn(row.eopp)} ← EOpp</td>
+                                    <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: severityColor(Math.abs(row.fpr_diff)) }}>{sgn(row.fpr_diff)}</td>
+                                    <td style={{ padding: '8px 12px', fontFamily: 'var(--font-mono)', color: severityColor(Math.abs(row.spd)) }}>{sgn(row.spd)} ← SPD</td>
+                                  </tr>
+                                </tbody>
+                              </table>
+
+                              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                                {[row.a1, row.a0].map((subg, idx) => (
+                                  <div key={idx}>
+                                    <div style={{ fontWeight: '700', fontSize: '11px', textTransform: 'uppercase', color: 'var(--on-surface-variant)', marginBottom: '8px' }}>
+                                      Samples: {subg.label}
+                                    </div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                      {subg.samples && subg.samples.length > 0 ? (
+                                        subg.samples.map((s, si) => (
+                                          <div key={si} style={{ 
+                                            padding: '10px', borderRadius: '6px', backgroundColor: 'var(--surface-container-low)',
+                                            borderLeft: `3px solid ${s.predicted === 'Toxic' ? 'var(--toxic)' : 'var(--non-toxic)'}`,
+                                            fontSize: '12px'
+                                          }}>
+                                            <div style={{ fontStyle: 'italic', marginBottom: '4px' }}>"{s.text}"</div>
+                                            <div style={{ display: 'flex', gap: '12px', fontSize: '10px', fontWeight: '600' }}>
+                                              <span style={{ color: s.predicted === 'Toxic' ? 'var(--toxic)' : 'var(--non-toxic)' }}>Predicted: {s.predicted}</span>
+                                              <span style={{ color: 'var(--on-surface-variant)' }}>Actual: {s.actual}</span>
+                                              {s.predicted !== s.actual && <span style={{ color: 'var(--tertiary)' }}>⚠ ERROR</span>}
+                                            </div>
+                                          </div>
+                                        ))
+                                      ) : <div style={{ color: 'var(--on-surface-variant)', fontStyle: 'italic' }}>No samples available</div>}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+              </>
+            )}
+          </div>
+
+          {/* Worst-Case Summary */}
+          <div className="card">
+            <div className="card-header">
+              <h2>Worst-Case Summary</h2>
+              <p style={{ color: 'var(--on-surface-variant)', fontSize: '13px', marginTop: '4px' }}>
+                Most adverse group-level behavior across all identities (per §1.4.3)
+              </p>
             </div>
-          ))}
-        </div>
-      </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px' }}>
+              {[
+                { label: 'Max |SPD|', identity: worst_case.max_spd.identity, value: worst_case.max_spd.value, desc: 'Largest selection rate gap' },
+                { label: 'Min Selection Ratio', identity: worst_case.min_selection_ratio.identity, value: worst_case.min_selection_ratio.value, desc: 'Lowest parity ratio (Ideal: 1.0)', isPercent: false, unit: '' },
+                { label: 'Max |EOpp|', identity: worst_case.max_eopp.identity, value: worst_case.max_eopp.value, desc: 'Largest true positive rate gap' },
+                { label: 'Worst Subgroup Accuracy', identity: worst_case.worst_accuracy.identity, value: worst_case.worst_accuracy.value, desc: `Subgroup: ${worst_case.worst_accuracy.subgroup || '—'}`, isPercent: true },
+              ].map((item, i) => (
+                <div key={i} style={{
+                  padding: '16px', borderRadius: '8px', backgroundColor: 'var(--surface-container)',
+                  border: `2px solid ${severityColor(Math.abs(item.value))}40`
+                }}>
+                  <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--on-surface-variant)', marginBottom: '4px' }}>{item.label}</div>
+                  <div style={{ fontSize: '22px', fontWeight: '700', color: severityColor(Math.abs(item.value)) }}>
+                    {item.isPercent ? pct(item.value) : sgn(item.value)}
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--primary)', fontWeight: '600', marginTop: '2px' }}>{item.identity}</div>
+                  <div style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginTop: '2px' }}>{item.desc}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
     </div>
   );

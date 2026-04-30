@@ -147,13 +147,31 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
         identity_attack = safe_float(row, 'identity_attack')
         sexual_explicit = safe_float(row, 'sexual_explicit')
 
-        # Identity columns — use dataset values when available, else None (not random)
-        male    = safe_float(row, 'male')
-        female  = safe_float(row, 'female')
-        black   = safe_float(row, 'black')
-        white   = safe_float(row, 'white')
-        asian   = safe_float(row, 'asian')
-        latino  = safe_float(row, 'latino')
+        # ── Identity Mapping ──────────────────────────────────────────────────
+        # Flexible mapping to support various CSV schemas (e.g. "Identity: Black", "black", "is_male")
+        def get_ident_val(r, name):
+            # 1. Try exact match (already lowercase)
+            if name in r and not pd.isna(r[name]):
+                try: return float(r[name])
+                except: pass
+            # 2. Try partial match
+            for col in df.columns:
+                if name in col.replace(':', '_').replace(' ', '_').split('_'):
+                    if not pd.isna(r[col]):
+                        try: return float(r[col])
+                        except: pass
+            return 0.0
+
+        male    = get_ident_val(row, 'male')
+        female  = get_ident_val(row, 'female')
+        black   = get_ident_val(row, 'black')
+        white   = get_ident_val(row, 'white')
+        asian   = get_ident_val(row, 'asian')
+        latino  = get_ident_val(row, 'latino')
+        christian = get_ident_val(row, 'christian')
+        jewish    = get_ident_val(row, 'jewish')
+        muslim    = get_ident_val(row, 'muslim')
+        psychiatric_or_mental_illness = get_ident_val(row, 'psychiatric_or_mental_illness')
 
         evaluation = CommentEvaluation(
             file_id=uploaded_file.id,
@@ -171,6 +189,10 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
             white=white,
             asian=asian,
             latino=latino,
+            christian=christian,
+            jewish=jewish,
+            muslim=muslim,
+            psychiatric_or_mental_illness=psychiatric_or_mental_illness,
             status="pending"
         )
         db.add(evaluation)
@@ -378,6 +400,90 @@ async def call_nim_logprobs_async(client: httpx.AsyncClient, text: str, model: s
     }
     return classification, confidence, debug_data
 
+async def detect_identities_async(client: httpx.AsyncClient, text: str, model: str = "meta/llama-3.1-70b-instruct"):
+    """
+    Infers presence of identity groups from text using LLM.
+    Used when CSV columns for identities are missing.
+    """
+    identities = [
+        "male", "female", "black", "white", "asian", "latino", 
+        "christian", "jewish", "muslim", "psychiatric_or_mental_illness",
+        "identity_caste_religion", "gender_based", "threat_group"
+    ]
+    prompt = f"""
+    Analyze the following text and identify if it mentions or targets any of these specific identity groups or categories.
+    Only mark as 1 if the group is explicitly mentioned or clearly the subject of the text.
+    
+    Groups:
+    - male, female, black, white, asian, latino, christian, jewish, muslim, psychiatric_or_mental_illness
+    - identity_caste_religion: Any mention of specific caste, religious identity, or broader religious themes.
+    - gender_based: Any mention related to gender roles, sexual orientation, or gender identity.
+    - threat_group: Language that is threatening, intimidating, or targets groups with violence.
+    
+    Output MUST be a valid JSON object with the group names as keys and 1 or 0 as values.
+    
+    Text: "{text}"
+    
+    JSON Output:
+    """
+    try:
+        headers = {
+            "Authorization": f"Bearer {NVIDIA_NIM_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0.0,
+            "max_tokens": 200,
+            "response_format": {"type": "json_object"}
+        }
+        response = await client.post(NIM_API_URL, headers=headers, json=payload, timeout=30.0)
+        response.raise_for_status()
+        data = response.json()
+        return json.loads(data['choices'][0]['message']['content'])
+    except:
+        return {}
+
+@app.post("/scan-identities/{file_id}")
+async def scan_identities(file_id: int, model: str = "meta/llama-3.1-70b-instruct", db: Session = Depends(get_db)):
+    """Retroactively scans already-evaluated comments for identities if labels are missing."""
+    comments = db.query(CommentEvaluation).filter(
+        CommentEvaluation.file_id == file_id,
+        CommentEvaluation.status == "evaluated"
+    ).all()
+    
+    # Only scan those that have 0 for all identity categories
+    to_scan = []
+    for c in comments:
+        has_any = any([
+            c.male, c.female, c.black, c.white, c.asian, c.latino, 
+            c.christian, c.jewish, c.muslim, c.psychiatric_or_mental_illness,
+            c.identity_caste_religion, c.gender_based, c.threat_group
+        ])
+        if not has_any:
+            to_scan.append(c)
+            
+    if not to_scan:
+        return {"message": "No comments need scanning.", "count": 0}
+        
+    semaphore = asyncio.Semaphore(2)
+    async def scan_one(client, comment):
+        async with semaphore:
+            idents = await detect_identities_async(client, comment.text, model)
+            for k, v in idents.items():
+                if hasattr(comment, k):
+                    setattr(comment, k, float(v))
+            return True
+
+    async with httpx.AsyncClient() as client:
+        tasks = [scan_one(client, c) for c in to_scan]
+        await asyncio.gather(*tasks)
+        db.commit()
+        
+    cache_invalidate_prefix(f"metrics:{file_id}")
+    return {"message": f"Successfully scanned {len(to_scan)} comments for identities.", "count": len(to_scan)}
+
 @app.post("/evaluate-batch")
 async def evaluate_batch(request: BatchEvaluateRequest, db: Session = Depends(get_db)):
     pending_comments = db.query(CommentEvaluation).filter(
@@ -401,8 +507,25 @@ async def evaluate_batch(request: BatchEvaluateRequest, db: Session = Depends(ge
             try:
                 # For Bulk Evaluation (Zero-Shot), we ONLY fetch the Logprobs to maximize speed
                 # and adhere strictly to the statistical zero-shot methodology.
-                # We do NOT ask the LLM for explanations here.
-                true_classification, true_confidence, debug_data = await call_nim_logprobs_async(client, comment.text, request.model)
+                # If identity columns are missing, we ALSO fetch identities in parallel.
+                
+                # Check if identities are missing (all 0)
+                needs_identities = not any([comment.male, comment.female, comment.black, comment.white, 
+                                           comment.asian, comment.latino, comment.christian, 
+                                           comment.jewish, comment.muslim])
+                
+                tasks = [call_nim_logprobs_async(client, comment.text, request.model)]
+                if needs_identities:
+                    tasks.append(detect_identities_async(client, comment.text, request.model))
+                
+                results = await asyncio.gather(*tasks)
+                
+                true_classification, true_confidence, debug_data = results[0]
+                if needs_identities and len(results) > 1:
+                    idents = results[1]
+                    for k, v in idents.items():
+                        if hasattr(comment, k):
+                            setattr(comment, k, float(v))
                 
                 comment.predicted_classification = true_classification
                 comment.confidence = true_confidence
@@ -567,13 +690,26 @@ def get_metrics(file_id: int = None, db: Session = Depends(get_db)):
     if cached is not None:
         return cached
 
+    identities = [
+        "male", "female", "black", "white", "asian", "latino",
+        "christian", "jewish", "muslim", "psychiatric_or_mental_illness",
+        "identity_caste_religion", "gender_based", "threat_group"
+    ]
+
     query = db.query(CommentEvaluation).filter(CommentEvaluation.status == "evaluated")
     if file_id is not None:
         query = query.filter(CommentEvaluation.file_id == file_id)
         
     evaluated = query.all()
-    if not evaluated:
-        return {"error": "No evaluated comments in database for this file."}
+    
+    total = len(evaluated)
+    if total == 0:
+        return {
+            "has_labels": False,
+            "overall": {"total": 0, "accuracy": 0, "selection_rate": 0},
+            "identities": [],
+            "diagnostics": {"total_evaluated": 0, "counts": {ident: 0 for ident in identities}}
+        }
 
     # ── Check whether ground-truth labels are present ────────────────────────
     # sentinel -1.0 means the CSV had no target column
@@ -601,13 +737,20 @@ def get_metrics(file_id: int = None, db: Session = Depends(get_db)):
     ppr_overall = (tp_all + fp_all) / total  # overall positive prediction rate
 
     # ── Per-identity subgroup metrics ───────────────────────────────────────
-    identities = ["male", "female", "black", "white", "asian", "latino"]
+    identities = [
+        "male", "female", "black", "white", "asian", "latino",
+        "christian", "jewish", "muslim", "psychiatric_or_mental_illness",
+        "identity_caste_religion", "gender_based", "threat_group"
+    ]
 
     def empty_stats():
         return {"tp": 0, "fp": 0, "tn": 0, "fn": 0}
 
     # For each identity: collect A=1 and A=0 subgroup stats separately
-    group_stats = {ident: {"a1": empty_stats(), "a0": empty_stats()} for ident in identities}
+    group_stats = {ident: {
+        "a1": {**empty_stats(), "samples": []}, 
+        "a0": {**empty_stats(), "samples": []}
+    } for ident in identities}
 
     for c in evaluated:
         actual   = c.target > 0.5
@@ -620,6 +763,14 @@ def get_metrics(file_id: int = None, db: Session = Depends(get_db)):
             elif not actual and pred_pos: s["fp"] += 1
             elif actual and not pred_pos: s["fn"] += 1
             else:                         s["tn"] += 1
+            
+            # Collect up to 5 samples per subgroup for UI inspection
+            if len(s["samples"]) < 5:
+                s["samples"].append({
+                    "text": c.text, 
+                    "predicted": c.predicted_classification, 
+                    "actual": "Toxic" if actual else "Non-Toxic"
+                })
 
     def compute_group_metrics(s):
         n = s["tp"] + s["fp"] + s["tn"] + s["fn"]
@@ -632,14 +783,26 @@ def get_metrics(file_id: int = None, db: Session = Depends(get_db)):
         tpr  = rec
         fpr  = s["fp"] / (s["fp"] + s["tn"]) if (s["fp"] + s["tn"]) > 0 else 0
         ppr  = (s["tp"] + s["fp"]) / n
-        return {"n": n, "accuracy": acc, "f1": f1, "tpr": tpr, "fpr": fpr, "ppr": ppr, "precision": prec, "recall": rec}
+        return {
+            "n": n, 
+            "accuracy": acc, 
+            "f1": f1, 
+            "tpr": tpr, 
+            "fpr": fpr, 
+            "selection_rate": ppr,
+            "precision": prec, 
+            "recall": rec,
+            "samples": s["samples"]
+        }
 
-    MIN_GROUP_SIZE = 5  # filter tiny groups for stable estimates
+    MIN_GROUP_SIZE = 3  # filter tiny groups for stable estimates
 
     identity_results = []
     worst = {
         "max_spd":         {"identity": "None", "value": 0.0},
         "max_eopp":        {"identity": "None", "value": 0.0},
+        "max_fpr_diff":    {"identity": "None", "value": 0.0},
+        "min_selection_ratio": {"identity": "None", "value": 1.0},
         "worst_accuracy":  {"identity": "None", "value": 1.0,  "subgroup": ""},
         "worst_f1":        {"identity": "None", "value": 1.0,  "subgroup": ""},
     }
@@ -652,31 +815,63 @@ def get_metrics(file_id: int = None, db: Session = Depends(get_db)):
             continue
         if m1["n"] < MIN_GROUP_SIZE or m0["n"] < MIN_GROUP_SIZE:
             continue
+            
+        display_name = ident.replace('_', ' ').title()
+        if ident == "identity_caste_religion": display_name = "Identity / Caste / Religion"
+        if ident == "gender_based": display_name = "Gender-Based"
+        if ident == "threat_group": display_name = "Threat-Related"
 
-        # Reference formulas (equations 3 & 4 from use_case.txt)
-        spd  = m1["ppr"] - m0["ppr"]   # P(Ŷ=1|A=1) − P(Ŷ=1|A=0)
-        eopp = m1["tpr"] - m0["tpr"]   # TPR(A=1) − TPR(A=0)
+        # Fairlearn standard formulas
+        # Difference = A=1 - A=0
+        # Ratio = min(A=1, A=0) / max(A=1, A=0)
+        
+        def calc_ratio(v1, v2):
+            if v1 == 0 and v2 == 0: return 1.0
+            return min(v1, v2) / max(v1, v2) if max(v1, v2) > 0 else 0.0
 
+        spd  = m1["selection_rate"] - m0["selection_rate"]
+        eopp = m1["tpr"] - m0["tpr"]
+        
         row = {
-            "name":  ident.capitalize(),
+            "name":  display_name,
             "spd":   spd,
             "eopp":  eopp,
-            "a1": {**m1, "label": f"{ident.capitalize()} = 1"},
-            "a0": {**m0, "label": f"{ident.capitalize()} = 0"},
+            "selection_rate_ratio": calc_ratio(m1["selection_rate"], m0["selection_rate"]),
+            "tpr_ratio": calc_ratio(m1["tpr"], m0["tpr"]),
+            "fpr_diff":  m1["fpr"] - m0["fpr"],
+            "a1": {**m1, "label": f"{display_name} = 1"},
+            "a0": {**m0, "label": f"{display_name} = 0"},
         }
         identity_results.append(row)
 
         if abs(spd) > abs(worst["max_spd"]["value"]):
-            worst["max_spd"] = {"identity": ident.capitalize(), "value": spd}
+            worst["max_spd"] = {"identity": display_name, "value": spd}
         if abs(eopp) > abs(worst["max_eopp"]["value"]):
-            worst["max_eopp"] = {"identity": ident.capitalize(), "value": eopp}
+            worst["max_eopp"] = {"identity": display_name, "value": eopp}
+        if abs(row["fpr_diff"]) > abs(worst["max_fpr_diff"]["value"]):
+            worst["max_fpr_diff"] = {"identity": display_name, "value": row["fpr_diff"]}
+        if row["selection_rate_ratio"] < worst["min_selection_ratio"]["value"]:
+            worst["min_selection_ratio"] = {"identity": display_name, "value": row["selection_rate_ratio"]}
 
         # Track worst accuracy across both subgroups
         for subg, m in [("A=1", m1), ("A=0", m0)]:
             if m["accuracy"] < worst["worst_accuracy"]["value"]:
-                worst["worst_accuracy"] = {"identity": ident.capitalize(), "value": m["accuracy"], "subgroup": subg}
+                worst["worst_accuracy"] = {"identity": display_name, "value": m["accuracy"], "subgroup": subg}
             if m["f1"] < worst["worst_f1"]["value"]:
-                worst["worst_f1"] = {"identity": ident.capitalize(), "value": m["f1"], "subgroup": subg}
+                worst["worst_f1"] = {"identity": display_name, "value": m["f1"], "subgroup": subg}
+
+    diagnostics = {
+        "group_counts": {
+            ident.replace('_', ' ').title(): (
+                group_stats[ident]["a1"]["tp"] + 
+                group_stats[ident]["a1"]["fp"] + 
+                group_stats[ident]["a1"]["tn"] + 
+                group_stats[ident]["a1"]["fn"]
+            ) for ident in identities
+        },
+        "total_evaluated": total,
+        "min_required": MIN_GROUP_SIZE
+    }
 
     result = {
         "has_labels": has_labels,
@@ -687,11 +882,17 @@ def get_metrics(file_id: int = None, db: Session = Depends(get_db)):
             "recall":    recall_overall    if has_labels else None,
             "tpr":       tpr_overall       if has_labels else None,
             "fpr":       fpr_overall       if has_labels else None,
-            "ppr":       ppr_overall,   # always valid (based on predictions, not ground truth)
+            "selection_rate": ppr_overall,
             "total":     total,
         },
         "identities": identity_results if has_labels else [],
         "worst_case": worst if has_labels else {},
+        "diagnostics": {
+            "min_group_size": MIN_GROUP_SIZE,
+            "counts": {ident: (group_stats[ident]["a1"]["tp"] + group_stats[ident]["a1"]["fp"] + 
+                               group_stats[ident]["a1"]["tn"] + group_stats[ident]["a1"]["fn"]) 
+                       for ident in identities}
+        }
     }
     cache_set(cache_key, result)
     return result

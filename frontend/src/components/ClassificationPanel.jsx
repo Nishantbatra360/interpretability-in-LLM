@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import axios from 'axios';
 import { Loader2, Play, Code, X } from 'lucide-react';
 import InterpretabilityHeatmap from './InterpretabilityHeatmap';
-import InterpretabilityPanel from './InterpretabilityPanel';
+import InterpretabilityPanel, { MethodologyBox, ComputedMetricsBox, TopTokenDriversBox, InterpretationSummaryBox } from './InterpretabilityPanel';
 import { AttributionBarChart } from './Charts';
 
 const AVAILABLE_MODELS = [
@@ -118,24 +118,34 @@ const ClassificationPanel = () => {
         )}
 
         {result && result.tokens && result.tokens.length > 0 && (
-          <div style={{ marginTop: '24px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-            <div className="card" style={{ padding: '20px' }}>
-              <AttributionBarChart tokens={result.tokens} />
-            </div>
-            <div className="card" style={{ padding: '20px' }}>
-              <InterpretabilityPanel
+          <div style={{ marginTop: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            {/* Row 1: Chart and Summary */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', alignItems: 'start' }}>
+              <div className="card" style={{ padding: '20px', height: '100%' }}>
+                <AttributionBarChart tokens={result.tokens} />
+              </div>
+              <InterpretationSummaryBox 
                 tokens={result.tokens}
                 confidence={result.confidence}
                 classification={result.classification}
-                compact={true}
               />
             </div>
+
+            {/* Row 2: Top Drivers */}
+            <TopTokenDriversBox tokens={result.tokens} />
+
+            {/* Row 3: Computed Metrics */}
+            <ComputedMetricsBox 
+              tokens={result.tokens}
+              confidence={result.confidence}
+              classification={result.classification}
+            />
           </div>
         )}
       </div>
       
       <div className="side-column">
-        <div className="card">
+        <div className="card" style={{ marginBottom: '24px' }}>
           <div className="card-header">
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '8px', color: 'var(--on-surface-variant)' }}>Model</label>
@@ -159,7 +169,7 @@ const ClassificationPanel = () => {
             {result && result.examples_used && result.examples_used.length > 0 && (
               <div style={{ marginTop: '16px', borderTop: '1px solid var(--outline-variant)', paddingTop: '16px' }}>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', marginBottom: '12px', color: 'var(--on-surface-variant)' }}>
-                  Few-Shot Context (from DB)
+                   Few-Shot Context (from DB)
                 </label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                   {result.examples_used.map((ex, idx) => (
@@ -173,6 +183,8 @@ const ClassificationPanel = () => {
             )}
           </div>
         </div>
+
+        <MethodologyBox />
       </div>
       
       {/* Raw API Request/Response Modal */}

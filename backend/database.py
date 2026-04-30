@@ -47,6 +47,13 @@ class CommentEvaluation(Base):
     white   = Column(Float, default=0.0)
     asian   = Column(Float, default=0.0)
     latino  = Column(Float, default=0.0)
+    christian = Column(Float, default=0.0)
+    jewish    = Column(Float, default=0.0)
+    muslim    = Column(Float, default=0.0)
+    psychiatric_or_mental_illness = Column(Float, default=0.0)
+    identity_caste_religion = Column(Float, default=0.0)
+    gender_based            = Column(Float, default=0.0)
+    threat_group            = Column(Float, default=0.0)
 
     # LLM evaluation results
     status                   = Column(String, default="pending")  # "pending" | "evaluated"
@@ -71,6 +78,13 @@ def _migrate():
         "insult":           "REAL",
         "identity_attack":  "REAL",
         "sexual_explicit":  "REAL",
+        "christian":        "REAL",
+        "jewish":           "REAL",
+        "muslim":           "REAL",
+        "psychiatric_or_mental_illness": "REAL",
+        "identity_caste_religion": "REAL",
+        "gender_based":            "REAL",
+        "threat_group":            "REAL",
     }
     with engine.connect() as conn:
         for col, dtype in new_cols.items():
