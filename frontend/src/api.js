@@ -15,11 +15,15 @@ const api = {
     const url = IS_DEMO ? `${PUBLIC_BASE}demo_data/file_state_${id}.json` : `${BASE_URL}/file-state/${id}`;
     const res = await axios.get(url);
     
-    // In demo mode, we also need evaluated comments which are separate files
     if (IS_DEMO) {
       try {
         const commentsRes = await axios.get(`${PUBLIC_BASE}demo_data/evaluated_comments_${id}.json`);
-        res.data.comments = commentsRes.data;
+        // Map DB keys to Frontend keys
+        res.data.comments = (commentsRes.data || []).map(c => ({
+          ...c,
+          classification: c.predicted_classification,
+          tokens: c.tokens_json ? JSON.parse(c.tokens_json).tokens : []
+        }));
       } catch (e) {
         res.data.comments = [];
       }

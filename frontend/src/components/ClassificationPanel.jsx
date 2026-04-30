@@ -31,8 +31,15 @@ const ClassificationPanel = ({ initialText = '' }) => {
         try {
           const publicBase = import.meta.env.BASE_URL;
           const res = await axios.get(`${publicBase}demo_data/deep_dive_sample.json`);
-          setResult(res.data);
-          setText(res.data.text);
+          const data = res.data;
+          // Map DB keys to Frontend keys
+          const mappedData = {
+            ...data,
+            classification: data.predicted_classification,
+            tokens: data.tokens_json ? JSON.parse(data.tokens_json).tokens : []
+          };
+          setResult(mappedData);
+          setText(data.text);
         } catch (e) {
           console.error("Failed to load deep dive demo", e);
         }
