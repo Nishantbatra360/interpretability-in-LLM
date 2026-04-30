@@ -21,7 +21,24 @@
           "truth": "Non-Toxic",
           "predicted": "Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [],
+          "tokens": [
+            {
+              "token": "Man",
+              "attribution": 0.7
+            },
+            {
+              "token": "shut",
+              "attribution": 0.2
+            },
+            {
+              "token": "fuck",
+              "attribution": 0.9
+            },
+            {
+              "token": "up",
+              "attribution": 0.1
+            }
+          ],
           "toxicity_rationale": ""
         },
         {
@@ -29,7 +46,32 @@
           "truth": "Toxic",
           "predicted": "Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [],
+          "tokens": [
+            {
+              "token": "guys",
+              "attribution": 0.5
+            },
+            {
+              "token": "protesters",
+              "attribution": 0.3
+            },
+            {
+              "token": "armed",
+              "attribution": 0.7
+            },
+            {
+              "token": "threat",
+              "attribution": 0.8
+            },
+            {
+              "token": "violence",
+              "attribution": 0.9
+            },
+            {
+              "token": "terrorists",
+              "attribution": 0.6
+            }
+          ],
           "toxicity_rationale": ""
         },
         {
@@ -37,7 +79,20 @@
           "truth": "Non-Toxic",
           "predicted": "Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [],
+          "tokens": [
+            {
+              "token": "Troll-In-Training",
+              "attribution": 0.9
+            },
+            {
+              "token": "since",
+              "attribution": 0.1
+            },
+            {
+              "token": "2016",
+              "attribution": 0.1
+            }
+          ],
           "toxicity_rationale": ""
         }
       ]
@@ -63,7 +118,132 @@
           "truth": "Non-Toxic",
           "predicted": "Non-Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [],
+          "tokens": [
+            {
+              "token": "She",
+              "attribution": 0.5
+            },
+            {
+              "token": "would",
+              "attribution": 0.2
+            },
+            {
+              "token": "be",
+              "attribution": 0.1
+            },
+            {
+              "token": "a",
+              "attribution": 0.1
+            },
+            {
+              "token": "major",
+              "attribution": 0.1
+            },
+            {
+              "token": "improvement",
+              "attribution": 0.1
+            },
+            {
+              "token": "for",
+              "attribution": 0.1
+            },
+            {
+              "token": "city",
+              "attribution": 0.1
+            },
+            {
+              "token": "council",
+              "attribution": 0.1
+            },
+            {
+              "token": "and",
+              "attribution": 0.1
+            },
+            {
+              "token": "she",
+              "attribution": 0.5
+            },
+            {
+              "token": "has",
+              "attribution": 0.1
+            },
+            {
+              "token": "a",
+              "attribution": 0.1
+            },
+            {
+              "token": "long",
+              "attribution": 0.1
+            },
+            {
+              "token": "history",
+              "attribution": 0.1
+            },
+            {
+              "token": "of",
+              "attribution": 0.1
+            },
+            {
+              "token": "giving",
+              "attribution": 0.1
+            },
+            {
+              "token": "all",
+              "attribution": 0.1
+            },
+            {
+              "token": "citizens",
+              "attribution": 0.1
+            },
+            {
+              "token": "a",
+              "attribution": 0.1
+            },
+            {
+              "token": "voice",
+              "attribution": 0.1
+            },
+            {
+              "token": "She",
+              "attribution": 0.5
+            },
+            {
+              "token": "is",
+              "attribution": 0.1
+            },
+            {
+              "token": "a",
+              "attribution": 0.1
+            },
+            {
+              "token": "problem",
+              "attribution": 0.1
+            },
+            {
+              "token": "solver",
+              "attribution": 0.1
+            },
+            {
+              "token": "that",
+              "attribution": 0.1
+            },
+            {
+              "token": "is",
+              "attribution": 0.1
+            },
+            {
+              "token": "what",
+              "attribution": 0.1
+            },
+            {
+              "token": "Portland",
+              "attribution": 0.1
+            },
+            {
+              "token": "needs",
+              "attribution": 0.1
+            }
+          ],
           "toxicity_rationale": ""
         },
         {
@@ -71,7 +251,16 @@
           "truth": "Toxic",
           "predicted": "Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [],
+          "tokens": [
+            {
+              "token": "bitch",
+              "attribution": 0.8
+            },
+            {
+              "token": "woman",
+              "attribution": 0.7
+            }
+          ],
           "toxicity_rationale": ""
         }
       ]
@@ -97,7 +286,24 @@
           "truth": "Toxic",
           "predicted": "Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [],
+          "tokens": [
+            {
+              "token": "Muslims",
+              "attribution": 0.7
+            },
+            {
+              "token": "Christian",
+              "attribution": 0.6
+            },
+            {
+              "token": "idiots",
+              "attribution": 0.3
+            },
+            {
+              "token": "bash",
+              "attribution": 0.4
+            }
+          ],
           "toxicity_rationale": ""
         }
       ]
@@ -123,7 +329,24 @@
           "truth": "Toxic",
           "predicted": "Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [],
+          "tokens": [
+            {
+              "token": "Muslims",
+              "attribution": 0.7
+            },
+            {
+              "token": "Christian",
+              "attribution": 0.6
+            },
+            {
+              "token": "idiots",
+              "attribution": 0.3
+            },
+            {
+              "token": "bash",
+              "attribution": 0.4
+            }
+          ],
           "toxicity_rationale": ""
         }
       ]
@@ -149,7 +372,32 @@
           "truth": "Toxic",
           "predicted": "Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [],
+          "tokens": [
+            {
+              "token": "guys",
+              "attribution": 0.5
+            },
+            {
+              "token": "protesters",
+              "attribution": 0.3
+            },
+            {
+              "token": "armed",
+              "attribution": 0.7
+            },
+            {
+              "token": "threat",
+              "attribution": 0.8
+            },
+            {
+              "token": "violence",
+              "attribution": 0.9
+            },
+            {
+              "token": "terrorists",
+              "attribution": 0.6
+            }
+          ],
           "toxicity_rationale": ""
         },
         {
@@ -157,7 +405,32 @@
           "truth": "Non-Toxic",
           "predicted": "Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [],
+          "tokens": [
+            {
+              "token": "greedy",
+              "attribution": 0.7
+            },
+            {
+              "token": "small-minded",
+              "attribution": 0.6
+            },
+            {
+              "token": "mass delusion",
+              "attribution": 0.5
+            },
+            {
+              "token": "take something that currently belongs to everyone",
+              "attribution": 0.4
+            },
+            {
+              "token": "give it to a select group of people",
+              "attribution": 0.4
+            },
+            {
+              "token": "so they can profit",
+              "attribution": 0.4
+            }
+          ],
           "toxicity_rationale": ""
         },
         {
@@ -165,7 +438,28 @@
           "truth": "Non-Toxic",
           "predicted": "Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [],
+          "tokens": [
+            {
+              "token": "trolls",
+              "attribution": 0.8
+            },
+            {
+              "token": "misogynists",
+              "attribution": 0.7
+            },
+            {
+              "token": "Racists",
+              "attribution": 0.6
+            },
+            {
+              "token": "Diversity",
+              "attribution": 0.4
+            },
+            {
+              "token": "verboten",
+              "attribution": 0.3
+            }
+          ],
           "toxicity_rationale": ""
         }
       ]
