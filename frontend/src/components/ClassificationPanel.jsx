@@ -32,11 +32,17 @@ const ClassificationPanel = ({ initialText = '' }) => {
           const publicBase = import.meta.env.BASE_URL;
           const res = await axios.get(`${publicBase}demo_data/deep_dive_sample.json`);
           const data = res.data;
-          // Map DB keys to Frontend keys
+          // Map DB keys to Frontend keys with robust parsing
+          let tokens = [];
+          try {
+            const parsed = typeof data.tokens_json === 'string' ? JSON.parse(data.tokens_json) : data.tokens_json;
+            tokens = parsed?.tokens || [];
+          } catch (e) { tokens = []; }
+
           const mappedData = {
             ...data,
-            classification: data.predicted_classification,
-            tokens: data.tokens_json ? JSON.parse(data.tokens_json).tokens : []
+            classification: data.predicted_classification || data.classification,
+            tokens: tokens
           };
           setResult(mappedData);
           setText(data.text);
