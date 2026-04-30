@@ -203,23 +203,24 @@ const FairnessMetrics = () => {
 
   const insights = metrics ? [
     { 
-        title: "Audit Status", 
-        val: Math.abs(metrics.worst_case.max_spd.value) > 0.1 ? "CRITICAL" : "STABLE",
-        color: severityColor(Math.abs(metrics.worst_case.max_spd.value)),
-        icon: ShieldCheck
+        title: "Toxicity Audit Rate", 
+        val: metrics?.overall?.count || 0, 
+        sub: "Comments Analyzed", 
+        color: 'var(--primary)', 
+        icon: FileText 
     },
     { 
         title: "Max Selection Gap", 
-        val: sgn(metrics.worst_case.max_spd.value),
-        sub: metrics.worst_case.max_spd.identity,
-        color: severityColor(Math.abs(metrics.worst_case.max_spd.value)),
+        val: sgn(metrics?.worst_case?.max_spd?.value || 0),
+        sub: metrics?.worst_case?.max_spd?.identity || 'None',
+        color: severityColor(Math.abs(metrics?.worst_case?.max_spd?.value || 0)),
         icon: TrendingUp
     },
     { 
         title: "Worst Opportunity Gap", 
-        val: sgn(metrics.worst_case.max_eopp.value),
-        sub: metrics.worst_case.max_eopp.identity,
-        color: severityColor(Math.abs(metrics.worst_case.max_eopp.value)),
+        val: sgn(metrics?.worst_case?.max_eopp?.value || 0),
+        sub: metrics?.worst_case?.max_eopp?.identity || 'None',
+        color: severityColor(Math.abs(metrics?.worst_case?.max_eopp?.value || 0)),
         icon: Target
     }
   ] : [];
@@ -287,7 +288,7 @@ const FairnessMetrics = () => {
                 </h2>
             </div>
             <div style={{ backgroundColor: 'var(--surface-container-low)', padding: '24px', borderRadius: '12px' }}>
-                <SPDEOppChart identities={metrics.identities} />
+                <SPDEOppChart identities={metrics?.subgroups || []} />
             </div>
           </div>
 
@@ -297,7 +298,7 @@ const FairnessMetrics = () => {
                 <Database size={20} className="text-primary" />
                 Detailed Subgroup Analysis
             </h3>
-            {metrics.identities.map(group => (
+            {(metrics?.subgroups || []).map(group => (
                 <SubgroupCard 
                     key={group.name} 
                     group={group} 
