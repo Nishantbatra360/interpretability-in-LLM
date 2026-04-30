@@ -24,6 +24,20 @@ const api = {
           try {
             const parsed = typeof c.tokens_json === 'string' ? JSON.parse(c.tokens_json) : c.tokens_json;
             tokens = parsed?.tokens || [];
+            
+            // Aggressive fallback for nested tokens
+            if (!tokens || tokens.length === 0) {
+              if (parsed?.raw_response) {
+                const raw = typeof parsed.raw_response === 'string' ? JSON.parse(parsed.raw_response) : parsed.raw_response;
+                tokens = raw?.tokens || [];
+              }
+            }
+            if (!tokens || tokens.length === 0) {
+              if (c.identity_response) {
+                const id_resp = typeof c.identity_response === 'string' ? JSON.parse(c.identity_response) : c.identity_response;
+                tokens = id_resp?.tokens || [];
+              }
+            }
           } catch (e) { tokens = []; }
           
           return {

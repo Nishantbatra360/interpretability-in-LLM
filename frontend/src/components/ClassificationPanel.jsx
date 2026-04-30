@@ -37,6 +37,20 @@ const ClassificationPanel = ({ initialText = '' }) => {
           try {
             const parsed = typeof data.tokens_json === 'string' ? JSON.parse(data.tokens_json) : data.tokens_json;
             tokens = parsed?.tokens || [];
+            
+            // Aggressive fallback for nested tokens
+            if (!tokens || tokens.length === 0) {
+              if (parsed?.raw_response) {
+                const raw = typeof parsed.raw_response === 'string' ? JSON.parse(parsed.raw_response) : parsed.raw_response;
+                tokens = raw?.tokens || [];
+              }
+            }
+            if (!tokens || tokens.length === 0) {
+              if (data.identity_response) {
+                const id_resp = typeof data.identity_response === 'string' ? JSON.parse(data.identity_response) : data.identity_response;
+                tokens = id_resp?.tokens || [];
+              }
+            }
           } catch (e) { tokens = []; }
 
           const mappedData = {
