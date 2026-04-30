@@ -36,14 +36,29 @@ def export_to_json():
 
             # 2. Export Evaluated Comments (Top 100)
             cursor.execute("SELECT * FROM evaluations WHERE file_id = ? AND status = 'evaluated' LIMIT 100", (file_id,))
-            comments = [dict(row) for row in cursor.fetchall()]
+            raw_comments = [dict(row) for row in cursor.fetchall()]
+            
+            processed_comments = []
+            for c in raw_comments:
+                # Robust token extraction for demo
+                tokens = []
+                t_json = robust_json_parse(c.get("tokens_json", "{}"))
+                tokens = t_json.get("tokens", [])
+                
+                if not tokens and c.get("identity_response"):
+                    id_resp = robust_json_parse(c["identity_response"])
+                    tokens = id_resp.get("tokens", [])
+                
+                c["tokens_json"] = json.dumps({"tokens": tokens})
+                processed_comments.append(c)
+
             with open(EXPORT_DIR / f"evaluated_comments_{file_id}.json", "w") as f:
-                json.dump(comments, f, indent=2)
+                json.dump(processed_comments, f, indent=2)
 
             # 3. Export Summary Stats
             cursor.execute("SELECT COUNT(*) as count FROM evaluations WHERE file_id = ? AND status = 'evaluated'", (file_id,))
             eval_count = cursor.fetchone()["count"]
-            toxic_count = sum(1 for c in comments if c["predicted_classification"] == "Toxic")
+            toxic_count = sum(1 for c in processed_comments if c["predicted_classification"] == "Toxic")
             
             state = {
                 "evaluated_count": eval_count,
@@ -80,13 +95,20 @@ def export_to_json():
                 
                 # Samples for this group
                 cursor.execute(f"SELECT * FROM evaluations WHERE file_id = ? AND {ident} > 0.5 AND status='evaluated' LIMIT 3", (file_id,))
+                samples_raw = cursor.fetchall()
                 samples = []
-                for s in cursor.fetchall():
-                    p = robust_json_parse(s["tokens_json"])
+                for s in samples_raw:
+                    # Robust token extraction for samples too
+                    tkns = []
+                    t_j = robust_json_parse(s["tokens_json"])
+                    tkns = t_j.get("tokens", [])
+                    if not tkns and s["identity_response"]:
+                        tkns = robust_json_parse(s["identity_response"]).get("tokens", [])
+
                     samples.append({
                         "text": s["text"], "truth": "Toxic" if s["target"] > 0.5 else "Non-Toxic",
                         "predicted": s["predicted_classification"], "type": "DISPARATE IMPACT" if spd > 0.1 else "CORRECT",
-                        "tokens": p.get("tokens", []), "toxicity_rationale": s["toxicity_rationale"]
+                        "tokens": tkns, "toxicity_rationale": s["toxicity_rationale"]
                     })
 
                 metrics_results.append({
@@ -100,9 +122,9 @@ def export_to_json():
                 json.dump({"subgroups": metrics_results, "worst_case": {"max_spd": {"identity": "male", "value": 0.12}, "max_eopp": {"identity": "muslim", "value": -0.08}}}, f, indent=2)
 
         # 5. Export Deep Dive Static Sample
-        if comments:
+        if processed_comments:
             with open(EXPORT_DIR / "deep_dive_sample.json", "w") as f:
-                json.dump(comments[0], f, indent=2)
+                json.dump(processed_comments[0], f, indent=2)
 
         print(f"DONE! Static Assets fully populated in: {EXPORT_DIR}")
 
