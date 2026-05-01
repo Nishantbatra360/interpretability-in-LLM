@@ -58,12 +58,12 @@ def get_db():
 
 class ClassificationRequest(BaseModel):
     text: str
-    model: str = "meta/llama-3.1-8b-instruct"
+    model: str = "meta/llama-3.1-70b-instruct"
 
 class BatchEvaluateRequest(BaseModel):
     file_id: int
     batch_size: int = Field(default=10, ge=1, le=35)
-    model: str = "meta/llama-3.1-8b-instruct"
+    model: str = "meta/llama-3.1-70b-instruct"
 
 @app.get("/")
 def read_root():
@@ -199,7 +199,7 @@ def robust_json_parse(raw_text: str):
     try: return json.loads(match.group())
     except: return None
 
-async def call_nim_logprobs_async(client: httpx.AsyncClient, text: str, model: str = "meta/llama-3.1-8b-instruct"):
+async def call_nim_logprobs_async(client: httpx.AsyncClient, text: str, model: str = "meta/llama-3.1-70b-instruct"):
     """
     CHAT-BASED DEEP DIVE: Rationale + Generative Proxy Attribution.
     Uses the stable Chat Completion API to avoid 404s.
@@ -251,13 +251,16 @@ Text: "{text}"
                 "prompt": prompt,
                 "raw_output": content
             }
+    except httpx.TimeoutException:
+        print(f"Deep Dive Error: NVIDIA NIM API timed out for model {model}")
+        raise HTTPException(status_code=504, detail=f"The NVIDIA NIM API ({model}) is currently slow or unresponsive. Please try again or select a different model.")
     except Exception as e:
         print(f"Deep Dive Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     
     return "Non-Toxic", 0.0, {"rationale": "Error", "tokens": []}
 
-async def unified_inference_async(client: httpx.AsyncClient, text: str, model: str = "meta/llama-3.1-8b-instruct"):
+async def unified_inference_async(client: httpx.AsyncClient, text: str, model: str = "meta/llama-3.1-70b-instruct"):
     identities = ["male", "female", "christian", "jewish", "muslim", "threat_group"]
     prompt = f"""Task: Perform a high-fidelity audit of the following text for toxicity and protected identities.
 Output MUST be a valid JSON object.
@@ -305,7 +308,7 @@ async def classify_text(request: ClassificationRequest, db: Session = Depends(ge
         except Exception as e: raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/stream-evaluate/{file_id}")
-async def stream_evaluate(file_id: int, batch_size: int = 10, model: str = "meta/llama-3.1-8b-instruct", db: Session = Depends(get_db)):
+async def stream_evaluate(file_id: int, batch_size: int = 10, model: str = "meta/llama-3.1-70b-instruct", db: Session = Depends(get_db)):
     async def event_generator():
         pending = db.query(CommentEvaluation).filter(CommentEvaluation.file_id == file_id, CommentEvaluation.status == "pending").limit(batch_size).all()
         if not pending: yield f"data: {json.dumps({'done': True})}\n\n"; return
@@ -350,7 +353,7 @@ async def stream_evaluate(file_id: int, batch_size: int = 10, model: str = "meta
     return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.get("/stream-scan/{file_id}")
-async def stream_scan(file_id: int, model: str = "meta/llama-3.1-8b-instruct", db: Session = Depends(get_db)):
+async def stream_scan(file_id: int, model: str = "meta/llama-3.1-70b-instruct", db: Session = Depends(get_db)):
     async def event_generator():
         comments = db.query(CommentEvaluation).filter(CommentEvaluation.file_id == file_id, CommentEvaluation.status == "evaluated").all()
         # Only scan if never scanned before (identity_response is empty)
@@ -531,10 +534,11 @@ def calculate_metrics(ev, target_col='target'):
         w_acc = min(ident_res, key=lambda x: x["a1"]["accuracy"])
         worst["worst_accuracy"] = {"identity": w_acc["name"], "value": w_acc["a1"]["accuracy"], "subgroup": f"A=1 ({w_acc['name']})"}
 
+    overall["count"] = overall["n"]
     return {
         "has_labels": has_labels,
         "overall": overall,
-        "identities": ident_res,
+        "subgroups": ident_res,
         "worst_case": worst,
         "diagnostics": {"group_counts": {i: len([c for c in ev if getattr(c, i, 0) > 0.5]) for i in ids}, "min_required": 1}
     }

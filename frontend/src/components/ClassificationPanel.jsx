@@ -7,8 +7,8 @@ import { AttributionBarChart } from './Charts';
 import api, { IS_DEMO } from '../api';
 
 const AVAILABLE_MODELS = [
-  { id: 'meta/llama-3.1-8b-instruct', name: 'Llama 3.1 8B (Fastest)' },
   { id: 'meta/llama-3.1-70b-instruct', name: 'Llama 3.1 70B (Recommended)' },
+  { id: 'meta/llama-3.1-8b-instruct', name: 'Llama 3.1 8B (Fastest)' },
   { id: 'mistralai/mistral-large-3-675b-instruct-2512', name: 'Mistral Large 3' },
   { id: 'mistralai/mistral-small-4-119b-2603', name: 'Mistral Small 4' },
   { id: 'google/gemma-4-31b-it', name: 'Gemma 4 31B (State of the Art)' },
@@ -18,7 +18,7 @@ const AVAILABLE_MODELS = [
 
 const ClassificationPanel = ({ initialText = '' }) => {
   const [text, setText] = useState(initialText);
-  const [model, setModel] = useState('meta/llama-3.1-8b-instruct');
+  const [model, setModel] = useState('meta/llama-3.1-70b-instruct');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
