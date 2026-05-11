@@ -1,10 +1,17 @@
 {
+  "overall": {
+    "accuracy": 0.9137931034482759,
+    "f1": 0.37499999999999994,
+    "precision": 0.3,
+    "recall": 0.5,
+    "total": 116
+  },
   "subgroups": [
     {
       "name": "male",
       "count": 37,
-      "spd": -0.115,
-      "eopp": 0.867,
+      "spd": 0.049,
+      "eopp": 0.167,
       "di": 1.5,
       "a1": {
         "ppr": 0.135,
@@ -70,8 +77,8 @@
     {
       "name": "female",
       "count": 7,
-      "spd": -0.107,
-      "eopp": 0.2,
+      "spd": 0.057,
+      "eopp": 0.5,
       "di": 1.5,
       "a1": {
         "ppr": 0.143,
@@ -137,8 +144,8 @@
     {
       "name": "christian",
       "count": 2,
-      "spd": 0.25,
-      "eopp": 0.2,
+      "spd": 0.414,
+      "eopp": -0.5,
       "di": 1.5,
       "a1": {
         "ppr": 0.5,
@@ -196,8 +203,8 @@
     {
       "name": "jewish",
       "count": 1,
-      "spd": -0.25,
-      "eopp": -0.8,
+      "spd": -0.086,
+      "eopp": -0.5,
       "di": 1.5,
       "a1": {
         "ppr": 0.0,
@@ -247,8 +254,8 @@
     {
       "name": "muslim",
       "count": 1,
-      "spd": -0.25,
-      "eopp": -0.8,
+      "spd": -0.086,
+      "eopp": -0.5,
       "di": 1.5,
       "a1": {
         "ppr": 0.0,
@@ -298,8 +305,8 @@
     {
       "name": "threat_group",
       "count": 9,
-      "spd": 0.194,
-      "eopp": 3.2,
+      "spd": 0.358,
+      "eopp": 0.5,
       "di": 1.5,
       "a1": {
         "ppr": 0.444,

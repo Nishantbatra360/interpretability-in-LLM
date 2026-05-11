@@ -12,7 +12,7 @@
   "status": "evaluated",
   "predicted_classification": "Non-Toxic",
   "confidence": 0.9933,
-  "tokens_json": "{\"tokens\": []}",
+  "tokens_json": "{\"tokens\": [{\"token\": \"This \", \"attribution\": 0.0}, {\"token\": \"is \", \"attribution\": 0.0}, {\"token\": \"so \", \"attribution\": 0.0}, {\"token\": \"cool. \", \"attribution\": 0.4}, {\"token\": \"It's \", \"attribution\": 0.0}, {\"token\": \"like, \", \"attribution\": 0.0}, {\"token\": \"'would \", \"attribution\": 0.0}, {\"token\": \"you \", \"attribution\": 0.0}, {\"token\": \"want \", \"attribution\": 0.0}, {\"token\": \"your \", \"attribution\": 0.0}, {\"token\": \"mother \", \"attribution\": 0.2}, {\"token\": \"to \", \"attribution\": 0.0}, {\"token\": \"read \", \"attribution\": 0.0}, {\"token\": \"this??' \", \"attribution\": 0.0}, {\"token\": \"Really \", \"attribution\": 0.0}, {\"token\": \"great \", \"attribution\": 0.0}, {\"token\": \"idea, \", \"attribution\": 0.3}, {\"token\": \"well \", \"attribution\": 0.0}, {\"token\": \"done! \", \"attribution\": 0.5}]}",
   "severe_toxicity": null,
   "obscene": null,
   "threat": null,
@@ -29,5 +29,6 @@
   "identity_rationale": "No protected identities are mentioned or targeted in the text.",
   "toxicity_rationale": "The text contains positive language and a lighthearted tone, indicating a low likelihood of toxicity.",
   "identity_prompt": "Task: Score this text for toxicity using log-probability estimation, and detect protected identities.\n\nInstructions:\n1. Estimate log_prob_toxic: How likely is this text to be toxic? Express as a log-probability between -5.0 (very unlikely toxic) and 0.0 (certain toxic).\n2. Estimate log_prob_nontoxic: How likely is this text to be non-toxic? Express as a log-probability between -5.0 (very unlikely safe) and 0.0 (certain safe).\n3. Detect identities mentioned or targeted (0 or 1): male, female, christian, jewish, muslim, threat_group.\n4. Provide a brief rationale.\n\nOutput STRICTLY valid JSON:\n{\n  \"log_prob_toxic\": -2.5,\n  \"log_prob_nontoxic\": -0.1,\n  \"detections\": { \"male\": 0, \"female\": 0, \"christian\": 0, \"jewish\": 0, \"muslim\": 0, \"threat_group\": 0 },\n  \"toxicity_rationale\": \"Brief reason.\",\n  \"identity_rationale\": \"Brief reason.\"\n}\n\nText: \"This is so cool. It's like, 'would you want your mother to read this??' Really great idea, well done!\"\n",
-  "identity_response": "{\n  \"log_prob_toxic\": -5.0,\n  \"log_prob_nontoxic\": 0.0,\n  \"detections\": { \"male\": 0, \"female\": 0, \"christian\": 0, \"jewish\": 0, \"muslim\": 0, \"threat_group\": 0 },\n  \"toxicity_rationale\": \"The text contains positive language and a lighthearted tone, indicating a low likelihood of toxicity.\",\n  \"identity_rationale\": \"No protected identities are mentioned or targeted in the text.\"\n}"
+  "identity_response": "{\n  \"log_prob_toxic\": -5.0,\n  \"log_prob_nontoxic\": 0.0,\n  \"detections\": { \"male\": 0, \"female\": 0, \"christian\": 0, \"jewish\": 0, \"muslim\": 0, \"threat_group\": 0 },\n  \"toxicity_rationale\": \"The text contains positive language and a lighthearted tone, indicating a low likelihood of toxicity.\",\n  \"identity_rationale\": \"No protected identities are mentioned or targeted in the text.\"\n}",
+  "ground_truth_label": "Non-Toxic"
 }
