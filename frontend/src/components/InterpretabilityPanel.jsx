@@ -192,7 +192,7 @@ export const ComputedMetricsBox = ({ tokens, confidence, classification }) => {
         <MetricCard label="Δlogit (Net Bias)" value={m.deltaLogit}
           color={m.deltaLogit > 0 ? 'var(--toxic)' : 'var(--non-toxic)'}
           description={m.deltaLogit > 0 ? 'Pulls → Toxic' : 'Pulls → Non-Toxic'} />
-        <MetricCard label="LLM Confidence" value={confidence} unit="%" color={predColor}
+        <MetricCard label="LLM Confidence" value={(confidence * 100).toFixed(1)} unit="%" color={predColor}
           description="As stated by LLM" />
         <MetricCard label="Focus Score" value={m.focusScore}
           color={m.focusScore > 0.5 ? 'var(--primary)' : 'var(--on-surface-variant)'}
@@ -203,7 +203,7 @@ export const ComputedMetricsBox = ({ tokens, confidence, classification }) => {
         <Formula label="ToxicityScore (calculated)" formula={`Σ positive S(t) / n = ${m.sumPos.toFixed(4)} / ${m.n}`} result={m.toxicityScore} />
         <Formula label="SafetyScore (calculated)" formula={`Σ |negative S(t)| / n = ${m.sumNeg.toFixed(4)} / ${m.n}`} result={m.safetyScore} />
         <Formula label="Δlogit (calculated)" formula={`ToxicityScore − SafetyScore = ${m.toxicityScore.toFixed(4)} − ${m.safetyScore.toFixed(4)}`} result={m.deltaLogit} highlight />
-        <Formula label="Verdict" formula={`sign(Δlogit) → ${m.deltaLogit > 0 ? '"Toxic"' : '"Non-Toxic"'}`} result={classification} highlight />
+        <Formula label="Verdict Prediction (Proxy)" formula={`sign(Δlogit) → ${m.deltaLogit > 0 ? '"Toxic"' : '"Non-Toxic"'}`} result={`Model output: ${classification}`} highlight />
       </div>
     </Section>
   );
@@ -273,9 +273,15 @@ export const InterpretationSummaryBox = ({ tokens, confidence, classification, d
           <code style={{ fontFamily: 'var(--font-mono)', color: m.deltaLogit > 0 ? 'var(--toxic)' : 'var(--non-toxic)', fontWeight: 700 }}>
             Δlogit = {m.deltaLogit.toFixed(4)}
           </code>.{' '}
-          Since this is <strong>{m.deltaLogit > 0 ? 'positive' : 'negative'}</strong>, the decision is{' '}
+          Based purely on this token-level math, the local signal pulls <strong>{m.deltaLogit > 0 ? 'Toxic' : 'Non-Toxic'}</strong>.{' '}
+          The final global decision output by the model was{' '}
           <strong style={{ color: predColor }}>{classification}</strong> with <strong>{(confidence * 100).toFixed(1)}%</strong> confidence.
         </p>
+        {((m.deltaLogit > 0 && !isToxic) || (m.deltaLogit <= 0 && isToxic)) && (
+          <div style={{ margin: '0 0 12px 0', padding: '10px 14px', backgroundColor: 'var(--surface-container-highest)', borderRadius: '6px', borderLeft: '4px solid var(--tertiary)', fontSize: '13px' }}>
+            <strong style={{ color: 'var(--tertiary)' }}>⚠️ Diagnostic Anomaly:</strong> The local token weights pull in the opposite direction of the final classification. This typically occurs when the model recognizes "toxic" trigger words but uses global context (like sarcasm or hypothetical phrasing) to ultimately classify the text as safe.
+          </div>
+        )}
         <p style={{ margin: '0 0 8px 0' }}>
           The signal is <strong>{m.focusScore > 0.6 ? 'highly concentrated' : m.focusScore > 0.3 ? 'moderately spread' : 'diffuse'}</strong> (Focus Score: {m.focusScore.toFixed(3)}),
           meaning the model {m.focusScore > 0.5 ? 'relied on a few key words' : 'distributed attention broadly across the text'}.

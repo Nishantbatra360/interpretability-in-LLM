@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { UploadCloud, Play, Loader2, Database, Trash2, Code, X, ShieldAlert } from 'lucide-react';
+import { UploadCloud, Play, Loader2, Database, Trash2, Code, X, ShieldAlert, BookOpen, Zap, ChevronDown, ChevronRight } from 'lucide-react';
 import InterpretabilityHeatmap from './InterpretabilityHeatmap';
 import InterpretabilityPanel from './InterpretabilityPanel';
+import { Section, Formula } from './InterpretabilityPanel';
 import { PredictionDonut, ConfidenceHistogram, TokenHeatmap } from './Charts';
 import api, { IS_DEMO } from '../api';
 import axios from 'axios';
@@ -31,6 +32,14 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
   const [expandedRows, setExpandedRows] = useState({});
   const [message, setMessage] = useState('');
   const [modalData, setModalData] = useState(null);
+  
+  // Pagination & Filtering
+  const [page, setPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterClass, setFilterClass] = useState('');
+  const [sortBy, setSortBy] = useState('');
+  const limit = 50; // Use 50 items per page for better performance
 
 
   const toggleRow = (id) => {
@@ -80,8 +89,21 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
     try {
       const data = await api.getFileState(selectedFileId);
       setDbStatus({ pending: data.pending, evaluated: data.evaluated });
-      setEvaluatedComments(data.comments || []);
       setGlobalStats(data.stats || null);
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const fetchComments = async (pageNum = 0) => {
+    if (!selectedFileId) return;
+    try {
+      const data = await api.getEvaluatedComments(selectedFileId, pageNum * limit, limit, searchQuery, filterClass, sortBy);
+      setEvaluatedComments(data.items || []);
+      setTotalPages(Math.ceil((data.total || 0) / limit));
+      if (pageNum === 0 && !searchQuery && !filterClass && !sortBy && data.items && data.items.length > 0) {
+        localStorage.setItem('last_evaluated_comment', data.items[0].text);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -94,8 +116,17 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
   // Fetch status once on mount + when selectedFileId changes
   useEffect(() => {
     if (!selectedFileId) return;
+    setPage(0);
     fetchStatus();
+    fetchComments(0);
   }, [selectedFileId]);
+
+  // Fetch comments when page, search, filter, or sort changes
+  useEffect(() => {
+    if (!selectedFileId) return;
+    const delay = setTimeout(() => fetchComments(page), 300);
+    return () => clearTimeout(delay);
+  }, [page, searchQuery, filterClass, sortBy]);
 
 
   const handleUpload = async () => {
@@ -161,6 +192,7 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
         setEvaluatingFileId(null);
         setProgress(null);
         fetchStatus();
+        fetchComments(page);
       }
     };
 
@@ -172,6 +204,7 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
       setProgress(null);
       setMessage('Evaluation stream interrupted.');
       fetchStatus();
+      fetchComments(page);
     };
   };
   
@@ -393,6 +426,113 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
       </div>
     </div>
 
+    {/* Zero-Shot Methodology Section */}
+    <div className="card" style={{ marginTop: '0' }}>
+      <div className="card-header" style={{ borderBottom: '1px solid var(--outline-variant)', paddingBottom: '16px' }}>
+        <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <BookOpen size={22} style={{ color: 'var(--primary)' }} />
+          Zero-Shot Classification Methodology
+        </h2>
+        <p style={{ color: 'var(--on-surface-variant)', fontSize: '14px', marginTop: '4px' }}>
+          How the bulk evaluation pipeline classifies toxicity without fine-tuning or token-level attribution.
+        </p>
+      </div>
+
+      <Section title="📐 Scoring Rule: Log-Probability Classification" defaultOpen={true}>
+        <p style={{ fontSize: '13px', lineHeight: 1.7, color: 'var(--on-surface)', marginBottom: '16px' }}>
+          Each comment is classified using a <strong>zero-shot prompt</strong>. The LLM is asked to output a binary verdict (Toxic or Non-Toxic) along with a confidence score that proxies the log-probability difference between the two competing labels. No token-level attribution is computed at this stage — that's reserved for the <strong>Deep Dive</strong>.
+        </p>
+
+        <Formula
+          label="Core Scoring Rule (Reference Plan §1.2)"
+          formula="s(x) = log P(Toxic | x) − log P(Non-Toxic | x)"
+          description="If s(x) > 0, the model prefers Toxic. If s(x) < 0, it prefers Non-Toxic. The magnitude indicates strength of preference."
+          highlight
+        />
+        <Formula
+          label="Prediction Rule"
+          formula="ŷ = 1 (Toxic)  if s(x) > 0,   else  0 (Non-Toxic)"
+          description="A simple sign test on the composite score determines the predicted label."
+        />
+        <Formula
+          label="Confidence Mapping"
+          formula="confidence = σ(|s(x)|) ≈ P(predicted_label | x)"
+          description="The absolute magnitude of s(x) is mapped to a 0–1 confidence via the LLM's own calibration."
+        />
+      </Section>
+
+      <Section title="🏷️ Ground Truth: Civil Comments Dataset" defaultOpen={false}>
+        <p style={{ fontSize: '13px', lineHeight: 1.7, color: 'var(--on-surface)', marginBottom: '16px' }}>
+          The dataset provides a continuous toxicity score (0.0–1.0) for each comment, aggregated from multiple human annotators. We binarize this into a label for evaluation:
+        </p>
+        <Formula
+          label="Ground Truth Binarization"
+          formula="y_true = 1 (Toxic)  if target > 0.5,   else  0 (Non-Toxic)"
+          description="The 0.5 threshold converts continuous annotator scores into a binary label for accuracy, F1, TPR, and FPR computation."
+          highlight
+        />
+        <Formula
+          label="Accuracy"
+          formula="Accuracy = (TP + TN) / N_labeled"
+          description="Fraction of labeled comments where the predicted classification matches ground truth. Only comments with a valid target score are included."
+        />
+        <Formula
+          label="F1 Score"
+          formula="F1 = 2 × Precision × Recall / (Precision + Recall)"
+          description="Harmonic mean of precision and recall. Balances false positives and false negatives."
+        />
+        <div style={{ padding: '10px 14px', backgroundColor: 'var(--surface-container)', borderRadius: '6px', borderLeft: '4px solid var(--tertiary)', fontSize: '13px', marginTop: '8px', color: 'var(--on-surface-variant)' }}>
+          <strong style={{ color: 'var(--tertiary)' }}>Note:</strong> Comments without a ground truth label (<code>target = -1.0</code>) are excluded from accuracy/F1/TPR/FPR computation but still count toward the Positive Prediction Rate (PPR) for fairness analysis.
+        </div>
+      </Section>
+
+      <Section title="🔍 Identity Detection & Fairness" defaultOpen={false}>
+        <p style={{ fontSize: '13px', lineHeight: 1.7, color: 'var(--on-surface)', marginBottom: '16px' }}>
+          Alongside toxicity, the zero-shot prompt detects <strong>protected demographic identities</strong> (male, female, christian, jewish, muslim, threat_group). These are stored as binary flags and used for subgroup fairness analysis in the <strong>Fairness Metrics</strong> tab.
+        </p>
+        <Formula
+          label="Statistical Parity Difference (SPD)"
+          formula="SPD = P(ŷ=Toxic | A=1) − P(ŷ=Toxic | A=0)"
+          description="Measures whether comments mentioning an identity group are more likely to be flagged as toxic. SPD = 0 means no disparity."
+        />
+        <Formula
+          label="Equal Opportunity Difference (EOpp)"
+          formula="EOpp = TPR(A=1) − TPR(A=0)"
+          description="Measures whether truly toxic comments are detected at equal rates across groups. Requires ground truth labels."
+        />
+      </Section>
+
+      <Section title="⚡ Zero-Shot vs. Deep Dive: What's the Difference?" defaultOpen={false}>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+            <thead>
+              <tr style={{ backgroundColor: 'var(--surface-container-high)', textAlign: 'left' }}>
+                <th style={{ padding: '10px 14px', fontWeight: '700', color: 'var(--on-surface-variant)', borderBottom: '2px solid var(--outline-variant)' }}>Aspect</th>
+                <th style={{ padding: '10px 14px', fontWeight: '700', color: 'var(--primary)', borderBottom: '2px solid var(--primary)' }}>Zero-Shot (This Page)</th>
+                <th style={{ padding: '10px 14px', fontWeight: '700', color: 'var(--tertiary)', borderBottom: '2px solid var(--tertiary)' }}>Deep Dive</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ['Purpose', 'Batch classification of 100s of comments', 'Detailed analysis of a single comment'],
+                ['Output', 'Toxic/Non-Toxic verdict + confidence + identities', 'Per-token toxic_score & safe_score → heatmap'],
+                ['Token Attribution', '❌ Not computed (fast)', '✅ Full per-word attribution map'],
+                ['Speed', '~1–2s per comment (300 max tokens)', '~3–5s per comment (512 max tokens)'],
+                ['Reference Plan', '§1.2 — Log-probability scoring', '§1.3 — Explanation signal extraction (IG proxy)'],
+                ['Use Case', 'Screening large datasets for patterns', 'Investigating why a specific comment was flagged'],
+              ].map(([aspect, zs, dd], i) => (
+                <tr key={i} style={{ borderBottom: '1px solid var(--outline-variant)' }}>
+                  <td style={{ padding: '8px 14px', fontWeight: '600', color: 'var(--on-surface)' }}>{aspect}</td>
+                  <td style={{ padding: '8px 14px', color: 'var(--on-surface-variant)' }}>{zs}</td>
+                  <td style={{ padding: '8px 14px', color: 'var(--on-surface-variant)' }}>{dd}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+    </div>
+
     {selectedFileId && (
         <div className="card">
             <div className="card-header">
@@ -411,6 +551,39 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
                   <ConfidenceHistogram comments={evaluatedComments} stats={globalStats} />
                 </div>
               
+              <div style={{ display: 'flex', gap: '16px', marginBottom: '16px' }}>
+                <input 
+                  type="text" 
+                  placeholder="Search comments..." 
+                  className="form-control" 
+                  value={searchQuery} 
+                  onChange={(e) => { setSearchQuery(e.target.value); setPage(0); }} 
+                  style={{ flex: 1 }}
+                />
+                <select 
+                  className="btn" 
+                  style={{ border: '1px solid var(--outline-variant)' }}
+                  value={filterClass} 
+                  onChange={(e) => { setFilterClass(e.target.value); setPage(0); }}
+                >
+                  <option value="">All Verdicts</option>
+                  <option value="Toxic">Toxic Only</option>
+                  <option value="Non-Toxic">Non-Toxic Only</option>
+                </select>
+                <select 
+                  className="btn" 
+                  style={{ border: '1px solid var(--outline-variant)' }}
+                  value={sortBy} 
+                  onChange={(e) => { setSortBy(e.target.value); setPage(0); }}
+                >
+                  <option value="">Sort by: ID (Default)</option>
+                  <option value="confidence_asc">Confidence (Low to High)</option>
+                  <option value="confidence_desc">Confidence (High to Low)</option>
+                  <option value="prediction">Prediction (A-Z)</option>
+                  <option value="ground_truth">Ground Truth (A-Z)</option>
+                </select>
+              </div>
+
               <div style={{ overflowX: 'auto' }}>
                 <table className="metrics-table" style={{ width: '100%', fontSize: '13px' }}>
                   <thead>
@@ -419,7 +592,7 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
                       <th>LLM Prediction</th>
                       <th>Confidence</th>
                       <th>Ground Truth</th>
-                      <th>Demographic Sub-Scores</th>
+                      <th>Toxicity Sub-Types</th>
                       <th>API Request</th>
                     </tr>
                   </thead>
@@ -475,23 +648,27 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
                             </td>
                             <td>
                               <div style={{ fontSize: '11px', fontFamily: 'var(--font-mono)', display: 'flex', flexDirection: 'column', gap: '1px' }}>
-                                {[
-                                  { k: 'toxic', v: comment.target },
-                                  { k: 'severe', v: comment.severe_toxicity },
-                                  { k: 'obscene', v: comment.obscene },
-                                  { k: 'threat', v: comment.threat },
-                                  { k: 'insult', v: comment.insult },
-                                  { k: 'id_atk', v: comment.identity_attack },
-                                  { k: 'sexual', v: comment.sexual_explicit },
-                                ].filter(x => x.v != null).map(({ k, v }) => (
-                                  <div key={k} style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
-                                    <span style={{ color: 'var(--on-surface-variant)', minWidth: '44px' }}>{k}:</span>
-                                    <div style={{ height: '6px', borderRadius: '3px', width: `${Math.round(v * 60)}px`, minWidth: '2px',
-                                      backgroundColor: v > 0.5 ? 'var(--toxic)' : v > 0.1 ? 'var(--tertiary)' : 'var(--outline-variant)' }} />
-                                    <span>{v.toFixed(2)}</span>
-                                  </div>
-                                ))}
-                                {comment.target == null && <span style={{ color: 'var(--on-surface-variant)' }}>—</span>}
+                                {(() => {
+                                  const subTypes = [
+                                    { k: 'severe', v: comment.severe_toxicity },
+                                    { k: 'obscene', v: comment.obscene },
+                                    { k: 'threat', v: comment.threat },
+                                    { k: 'insult', v: comment.insult },
+                                    { k: 'id_atk', v: comment.identity_attack },
+                                    { k: 'sexual', v: comment.sexual_explicit },
+                                  ].filter(x => x.v != null && x.v > 0);
+                                  
+                                  if (subTypes.length === 0) return <span style={{ color: 'var(--on-surface-variant)' }}>None</span>;
+                                  
+                                  return subTypes.map(({ k, v }) => (
+                                    <div key={k} style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                      <span style={{ color: 'var(--on-surface-variant)', minWidth: '44px' }}>{k}:</span>
+                                      <div style={{ height: '6px', borderRadius: '3px', width: `${Math.round(v * 60)}px`, minWidth: '2px',
+                                        backgroundColor: v > 0.5 ? 'var(--toxic)' : v > 0.1 ? 'var(--tertiary)' : 'var(--outline-variant)' }} />
+                                      <span>{v.toFixed(2)}</span>
+                                    </div>
+                                  ));
+                                })()}
                               </div>
                             </td>
                             <td>
@@ -513,56 +690,155 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
                           </tr>
                           {expandedRows[comment.id] && (
                             <tr style={{ backgroundColor: 'var(--surface-container-lowest)' }}>
-                              <td colSpan="6" style={{ padding: '16px' }}>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                                  <div>
-                                    <div style={{ fontSize: '13px', lineHeight: '1.6', color: 'var(--on-surface)', marginBottom: '12px' }}>
-                                      {(() => {
-                                        const p = JSON.parse(comment.tokens_json || '{}');
-                                        // Robust key checking
-                                        const rat = p.toxicity_rationale || p.rationale || p.toxicity || (p.raw_response ? JSON.parse(p.raw_response).toxicity_rationale : null);
-                                        const tks = p.tokens || (p.raw_response ? JSON.parse(p.raw_response).tokens : []);
-                                        
-                                        return (
-                                          <>
-                                            <div style={{ marginBottom: '8px' }}>{rat || 'No rationale available for this record.'}</div>
-                                            <TokenHeatmap tokens={tks} fullText={comment.text} />
-                                          </>
-                                        );
-                                      })()}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '8px' }}>Identity Detections</div>
-                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                                      {(() => {
-                                        const p = JSON.parse(comment.tokens_json || '{}');
-                                        const raw_dets = p.raw_response ? JSON.parse(p.raw_response).detections : (p.detections || {});
-                                        
-                                        const idents = [
-                                          { label: 'MALE', val: comment.male || raw_dets.male },
-                                          { label: 'FEMALE', val: comment.female || raw_dets.female },
-                                          { label: 'CHRISTIAN', val: comment.christian || raw_dets.christian },
-                                          { label: 'JEWISH', val: comment.jewish || raw_dets.jewish },
-                                          { label: 'MUSLIM', val: comment.muslim || raw_dets.muslim },
-                                          { label: 'THREAT', val: comment.threat_group || raw_dets.threat_group },
-                                        ].filter(i => i.val > 0.5);
+                              <td colSpan="6" style={{ padding: '20px' }}>
+                                {(() => {
+                                  const p = JSON.parse(comment.tokens_json || '{}');
+                                  const rat = p.toxicity_rationale || p.rationale || p.toxicity || 'No rationale available.';
+                                  const logT = p.log_prob_toxic;
+                                  const logNT = p.log_prob_nontoxic;
+                                  const score = p.score;
+                                  const hasLogProbs = logT !== undefined && logNT !== undefined && score !== undefined;
+                                  
+                                  // Parse raw response for identity detections
+                                  let raw_dets = {};
+                                  try { raw_dets = p.raw_response ? JSON.parse(p.raw_response).detections : (p.detections || {}); } catch(e) {}
+                                  
+                                  const idents = [
+                                    { label: 'MALE', val: comment.male || raw_dets.male },
+                                    { label: 'FEMALE', val: comment.female || raw_dets.female },
+                                    { label: 'CHRISTIAN', val: comment.christian || raw_dets.christian },
+                                    { label: 'JEWISH', val: comment.jewish || raw_dets.jewish },
+                                    { label: 'MUSLIM', val: comment.muslim || raw_dets.muslim },
+                                    { label: 'THREAT', val: comment.threat_group || raw_dets.threat_group },
+                                  ].filter(i => i.val > 0.5);
 
-                                        if (idents.length === 0) return <span style={{ fontSize: '12px', color: 'var(--on-surface-variant)', fontStyle: 'italic' }}>No protected identities detected.</span>;
+                                  const isToxic = comment.predicted_classification === 'Toxic';
+                                  const predColor = isToxic ? 'var(--toxic)' : 'var(--non-toxic)';
 
-                                        return idents.map(i => (
-                                          <span key={i.label} style={{ 
-                                            padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: '700', 
-                                            backgroundColor: 'var(--surface-container-high)', color: 'var(--secondary)',
-                                            border: '1px solid var(--secondary)'
-                                          }}>
-                                            {i.label}
-                                          </span>
-                                        ));
-                                      })()}
+                                  return (
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                                      {/* Rationale */}
+                                      <div style={{ 
+                                        padding: '12px 16px', backgroundColor: 'var(--surface-container)', 
+                                        borderRadius: '6px', borderLeft: `4px solid ${predColor}`,
+                                        fontSize: '13px', lineHeight: '1.6', color: 'var(--on-surface)'
+                                      }}>
+                                        <div style={{ fontSize: '11px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--on-surface-variant)', marginBottom: '6px' }}>LLM Rationale</div>
+                                        {rat}
+                                      </div>
+
+                                      {/* Formula Calculations */}
+                                      {hasLogProbs ? (
+                                        <div style={{ 
+                                          display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px'
+                                        }}>
+                                          {/* Left: Step-by-step formulas */}
+                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <div style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--primary)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                              <Zap size={14} /> Zero-Shot Score Derivation
+                                            </div>
+
+                                            <Formula
+                                              label="Step 1: Log-Probability (Toxic)"
+                                              formula={`log P(Toxic | x) = ${logT.toFixed(4)}`}
+                                              description="LLM's estimated log-probability that this text is toxic."
+                                            />
+                                            <Formula
+                                              label="Step 2: Log-Probability (Non-Toxic)"
+                                              formula={`log P(Non-Toxic | x) = ${logNT.toFixed(4)}`}
+                                              description="LLM's estimated log-probability that this text is safe."
+                                            />
+                                            <Formula
+                                              label="Step 3: Composite Score s(x)"
+                                              formula={`s(x) = ${logT.toFixed(4)} − ${logNT >= 0 ? '' : '('}${logNT.toFixed(4)}${logNT >= 0 ? '' : ')'} = ${score.toFixed(4)}`}
+                                              description={`s(x) ${score > 0 ? '> 0 → Model prefers Toxic' : score < 0 ? '< 0 → Model prefers Non-Toxic' : '= 0 → Borderline case'}`}
+                                              highlight
+                                            />
+                                          </div>
+
+                                          {/* Right: Verdict derivation */}
+                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                            <div style={{ fontSize: '12px', fontWeight: '700', textTransform: 'uppercase', color: 'var(--on-surface-variant)', marginBottom: '4px' }}>
+                                              📊 Verdict Derivation
+                                            </div>
+
+                                            <Formula
+                                              label="Step 4: Classification Rule"
+                                              formula={`ŷ = ${score > 0 ? '1 (Toxic)' : '0 (Non-Toxic)'}  ← sign(${score.toFixed(4)})`}
+                                              description="Binary prediction from the sign of s(x)."
+                                              highlight
+                                            />
+                                            <Formula
+                                              label="Step 5: Confidence"
+                                              formula={`σ(|${score.toFixed(4)}|) = 1 / (1 + e^(-${Math.abs(score).toFixed(4)})) = ${comment.confidence?.toFixed(4) || 'N/A'}`}
+                                              description="Sigmoid of absolute score maps to calibrated confidence."
+                                            />
+
+                                            {/* Identity tags */}
+                                            <div style={{ marginTop: '8px' }}>
+                                              <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '8px' }}>Identity Detections</div>
+                                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                                {idents.length === 0 
+                                                  ? <span style={{ fontSize: '12px', color: 'var(--on-surface-variant)', fontStyle: 'italic' }}>No protected identities detected.</span>
+                                                  : idents.map(i => (
+                                                    <span key={i.label} style={{ 
+                                                      padding: '3px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: '700', 
+                                                      backgroundColor: 'var(--surface-container-high)', color: 'var(--secondary)',
+                                                      border: '1px solid var(--secondary)'
+                                                    }}>
+                                                      {i.label}
+                                                    </span>
+                                                  ))
+                                                }
+                                              </div>
+                                            </div>
+
+                                            {/* Ground truth comparison if available */}
+                                            {comment.target !== -1.0 && comment.target !== null && (
+                                              <div style={{ 
+                                                marginTop: '8px', padding: '10px 14px', borderRadius: '6px',
+                                                backgroundColor: (isToxic === (comment.target > 0.5)) 
+                                                  ? 'rgba(0,108,75,0.08)' : 'rgba(186,26,26,0.08)',
+                                                border: `1px solid ${(isToxic === (comment.target > 0.5)) ? 'var(--non-toxic)' : 'var(--toxic)'}`,
+                                                fontSize: '12px'
+                                              }}>
+                                                <strong>Ground Truth:</strong> target = {comment.target?.toFixed(3)} → {comment.target > 0.5 ? 'Toxic' : 'Non-Toxic'}{' '}
+                                                {isToxic === (comment.target > 0.5) 
+                                                  ? <span style={{ color: 'var(--non-toxic)', fontWeight: '700' }}>✓ Correct</span>
+                                                  : <span style={{ color: 'var(--toxic)', fontWeight: '700' }}>✗ {isToxic ? 'False Positive' : 'False Negative'}</span>
+                                                }
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      ) : (
+                                        /* Fallback for older records without log-probs */
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
+                                          <div style={{ fontSize: '13px', color: 'var(--on-surface-variant)' }}>
+                                            <em>Log-probability data not available for this record (evaluated before formula update). Re-evaluate to see formula breakdown.</em>
+                                          </div>
+                                          <div>
+                                            <div style={{ fontSize: '11px', fontWeight: '700', color: 'var(--secondary)', textTransform: 'uppercase', marginBottom: '8px' }}>Identity Detections</div>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                                              {idents.length === 0 
+                                                ? <span style={{ fontSize: '12px', color: 'var(--on-surface-variant)', fontStyle: 'italic' }}>No protected identities detected.</span>
+                                                : idents.map(i => (
+                                                  <span key={i.label} style={{ 
+                                                    padding: '3px 10px', borderRadius: '4px', fontSize: '11px', fontWeight: '700', 
+                                                    backgroundColor: 'var(--surface-container-high)', color: 'var(--secondary)',
+                                                    border: '1px solid var(--secondary)'
+                                                  }}>
+                                                    {i.label}
+                                                  </span>
+                                                ))
+                                              }
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
                                     </div>
-                                  </div>
-                                </div>
+                                  );
+                                })()}
                               </td>
                             </tr>
                           )}
@@ -572,6 +848,33 @@ const BulkUploadPanel = ({ isEvaluating, setIsEvaluating, evaluatingFileId, setE
                   </tbody>
                 </table>
               </div>
+              
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '16px', padding: '16px', backgroundColor: 'var(--surface-container-low)', borderRadius: '8px', border: '1px solid var(--outline-variant)' }}>
+                  <div style={{ fontSize: '13px', color: 'var(--on-surface-variant)' }}>
+                    Showing page <strong>{page + 1}</strong> of <strong>{totalPages}</strong>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button 
+                      className="btn" 
+                      style={{ padding: '6px 12px', fontSize: '13px', border: '1px solid var(--outline-variant)', backgroundColor: 'var(--surface)' }}
+                      disabled={page === 0}
+                      onClick={() => setPage(p => Math.max(0, p - 1))}
+                    >
+                      Previous
+                    </button>
+                    <button 
+                      className="btn" 
+                      style={{ padding: '6px 12px', fontSize: '13px', border: '1px solid var(--outline-variant)', backgroundColor: 'var(--surface)' }}
+                      disabled={page >= totalPages - 1}
+                      onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
               </>
             )}
           </div>

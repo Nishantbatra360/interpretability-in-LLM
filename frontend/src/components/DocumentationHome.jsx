@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, Terminal, CheckCircle, Code, Zap, Activity, ShieldCheck, Database, TrendingUp, Target } from 'lucide-react';
+import { BookOpen, Terminal, Code, Zap, Activity, ShieldCheck, Database, Target, AlertTriangle } from 'lucide-react';
 
 const CodeBlock = ({ title, code }) => (
   <div style={{ marginBottom: '24px', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--outline-variant)' }}>
@@ -73,46 +73,52 @@ const DocumentationHome = () => {
         {/* Header */}
         <div className="card-header" style={{ borderBottom: '1px solid var(--outline-variant)', paddingBottom: '32px', marginBottom: '40px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
-            <div style={{ backgroundColor: 'var(--primary-container)', color: 'var(--primary)', padding: '12px', borderRadius: '12px' }}>
-              <ShieldCheck size={40} />
+            <div style={{ color: 'var(--primary)', padding: '4px' }}>
+              <BookOpen size={48} strokeWidth={1.5} />
             </div>
             <div>
               <h2 style={{ fontSize: '32px', fontWeight: '800', margin: 0 }}>Implementation Whitepaper</h2>
               <p style={{ color: 'var(--on-surface-variant)', fontSize: '16px', marginTop: '4px' }}>
-                Technical reference for the Unified LLM Fairness Suite
+                Technical architecture for the Bias Lens diagnostic suite.
               </p>
             </div>
           </div>
           <p style={{ color: 'var(--on-surface)', fontSize: '15px', lineHeight: 1.8 }}>
-            This application utilizes a <strong>Single-Pass Unified Inference</strong> pipeline. 
-            By merging classification and demographic detection, we ensure that fairness metrics 
-            are mathematically grounded in the same model context as the toxicity verdict.
+            Bias Lens is an enterprise POC built to audit Large Language Models for subtle biases, 
+            toxic alignment gaps, and statistical disparities. The pipeline is broken into three core modules: 
+            Bulk Evaluation, Subgroup Fairness, and Interpretability Deep Dive.
           </p>
         </div>
 
-        {/* 1. Unified Engine */}
+        {/* 1. Zero-Shot Classification */}
         <section style={{ marginBottom: '64px' }}>
           <h3 style={{ fontSize: '24px', fontWeight: '700', color: 'var(--primary)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <Zap size={28} />
-            1. Unified Single-Pass Audit
+            1. Zero-Shot Bulk Evaluation
           </h3>
           <p style={{ fontSize: '15px', lineHeight: 1.8, marginBottom: '20px' }}>
-            The system utilizes a <strong>Zero-Shot Unified Architecture</strong>. Toxicity classification and demographic identification (Gender, Religion, Threat) are executed in a single high-fidelity inference call, reducing API latency by 50%.
+            Following the reference plan (§1.2), the LLM outputs raw <strong>log-probabilities</strong> for both labels independently. The server then computes the composite score, classification, and confidence mathematically — making every prediction fully auditable.
           </p>
           
           <CodeBlock
-            title="Unified Audit JSON Schema"
-            code={`{
-  "toxicity": "Toxic" | "Non-Toxic",
-  "confidence": Float (0-1),
-  "detections": { "male": 0, "female": 0, "christian": 0, "jewish": 0, "muslim": 0, "threat_group": 0 },
-  "toxicity_rationale": "Visual reasoning for verdict",
-  "tokens": [ { "token": "keyword", "attribution": Float } ]
-}`}
+            title="LLM Output → Server-Side Computation"
+            code={`// Step 1: LLM returns raw log-probabilities
+{
+  "log_prob_toxic": -0.35,      // log P(Toxic | x)
+  "log_prob_nontoxic": -2.80,   // log P(Non-Toxic | x)
+  "detections": { "male": 0, "female": 0, ... },
+  "toxicity_rationale": "...",
+  "identity_rationale": "..."
+}
+
+// Step 2: Server computes classification
+s(x)       = log_prob_toxic - log_prob_nontoxic  // = -0.35 - (-2.80) = +2.45
+ŷ          = sign(s(x)) > 0 ? "Toxic" : "Non-Toxic"  // = Toxic
+confidence = σ(|s(x)|) = 1 / (1 + e^(-2.45))    // = 0.9203`}
           />
-          
-          <InfoBox title="Data Integrity Guard" icon={ShieldCheck}>
-            The backend includes an automated <strong>Ghost-Busting</strong> engine that monitors LLM response health. Any record with an empty raw response is instantly reverted to 'Pending', ensuring 100% metric accuracy.
+
+          <InfoBox title="Design Decision: Server-Side Math" icon={Zap}>
+            By extracting raw log-probabilities from the LLM and computing classification server-side, we eliminate the LLM's own thresholding bias. The user can inspect the exact values (log P(toxic|x), log P(non-toxic|x), s(x), σ) for every single comment by clicking its row. Token-level attribution is reserved for the Deep Dive module.
           </InfoBox>
         </section>
 
@@ -120,56 +126,55 @@ const DocumentationHome = () => {
         <section style={{ marginBottom: '64px' }}>
           <h3 style={{ fontSize: '24px', fontWeight: '700', color: 'var(--primary)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <Code size={28} />
-            2. Keyword-to-Full-Text Mapping
+            2. Interpretability Deep-Dive (Per-Token Attribution)
           </h3>
           <p style={{ fontSize: '15px', lineHeight: 1.8, marginBottom: '20px' }}>
-            Our <strong>Interpretability Engine</strong> uses a hybrid approach to visualize model reasoning directly on the original dataset without redundant inference.
+            Following the reference plan (§1.3), the Deep Dive performs <strong>explanation signal extraction</strong> on a single comment. Since true Integrated Gradients (IG) require white-box model access, we implement a <strong>Generative Attribution Proxy</strong>: the LLM decomposes its reasoning into per-word <code>toxic_score</code> and <code>safe_score</code>, which are combined server-side into a single attribution value.
           </p>
           
+          <CodeBlock
+            title="Attribution Computation (Server-Side)"
+            code={`// For each token returned by the LLM:
+attribution = toxic_score - safe_score
+
+// toxic_score: How much does this word contribute to toxicity? (0.0 - 1.0)
+// safe_score:  How much does this word signal safety/politeness? (0.0 - 1.0)
+
+// Result:
+//   attribution > 0  → Token pushes toward TOXIC  (Red in heatmap)
+//   attribution < 0  → Token pushes toward SAFE   (Green in heatmap)
+//   attribution ≈ 0  → Neutral token              (No highlight)`}
+          />
+          
           <ul style={{ fontSize: '14px', lineHeight: 1.7, marginBottom: '20px', paddingLeft: '24px' }}>
-            <li><strong>Keyword Attribution:</strong> The model assigns 'Heat Weightage' to specific high-impact words (Red = Toxic pull, Green = Safe pull).</li>
-            <li><strong>Contextual Reconstruction:</strong> The frontend intelligently maps these scores back onto the original database text, providing full contextual visibility in both Fairness and Bulk tabs.</li>
+            <li><strong>Toxicity & Safety Scores:</strong> Computed by averaging the strictly positive and negative attribution values across all tokens.</li>
+            <li><strong>Δlogit (Net Bias):</strong> The mathematical difference: <code>ToxicityScore − SafetyScore</code>. Positive = overall toxic signal.</li>
+            <li><strong>Diagnostic Anomalies:</strong> When local token-level math contradicts the global model classification (e.g., "terrorist" has high toxic_score but overall comment is Non-Toxic due to political commentary context).</li>
+            <li><strong>Focus Score:</strong> Entropy-based metric measuring whether the model relied on a few key words (focused) or distributed attention broadly (diffuse).</li>
           </ul>
+
+          <InfoBox title="Why Two Separate Scores?" icon={AlertTriangle}>
+            Small LLMs (8B parameters) confuse "positive/negative attribution" with sentiment polarity — assigning negative scores to harmful words like "bad" because the word has negative sentiment. By asking for independent <code>toxic_score</code> and <code>safe_score</code> and computing attribution server-side, we eliminate this alignment failure entirely.
+          </InfoBox>
         </section>
 
         {/* 3. Fairness Metrics Section */}
         <section style={{ marginBottom: '64px' }}>
           <h3 style={{ fontSize: '24px', fontWeight: '700', color: 'var(--primary)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
             <Activity size={28} />
-            3. Disparity & Fairness Analysis
+            3. Subgroup Fairness Metrics
           </h3>
           <p style={{ fontSize: '15px', lineHeight: 1.8, marginBottom: '20px' }}>
-            The dashboard performs a demographic audit by comparing model outcomes for identity subgroups (A=1) against the majority/reference baseline (A=0).
+            By cross-referencing the LLM's Toxicity classifications against the detected protected identities (Gender, Religion, etc.) and the original dataset's Ground Truth labels, we generate a comprehensive fairness audit.
           </p>
+
+          <ul style={{ fontSize: '14px', lineHeight: 1.7, marginBottom: '24px', paddingLeft: '24px' }}>
+            <li><strong>Confusion Matrices:</strong> We calculate True Positives, False Positives, True Negatives, and False Negatives per subgroup to understand exactly where the model fails.</li>
+            <li><strong>False Positive Word Clouds:</strong> We extract and aggregate words from comments that the LLM incorrectly flagged as Toxic, highlighting specific linguistic triggers (e.g., AAVE or religious terms) causing systemic bias.</li>
+          </ul>
 
           <FormulaLegend />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px', marginTop: '32px' }}>
-             <div style={{ padding: '20px', borderRadius: '12px', backgroundColor: 'var(--surface-container-high)', border: '1px solid var(--primary-container)' }}>
-                <div style={{ fontWeight: '700', color: 'var(--primary)', marginBottom: '8px' }}>Statistical Parity (SPD)</div>
-                <div style={{ fontSize: '13px', lineHeight: 1.6 }}>
-                  Measures <strong>Outcome Equity</strong>. Does the model flag one group more than another?
-                </div>
-             </div>
-             <div style={{ padding: '20px', borderRadius: '12px', backgroundColor: 'var(--surface-container-high)', border: '1px solid var(--secondary-container)' }}>
-                <div style={{ fontWeight: '700', color: 'var(--secondary)', marginBottom: '8px' }}>Equal Opportunity (EOpp)</div>
-                <div style={{ fontSize: '13px', lineHeight: 1.6 }}>
-                  Measures <strong>Sensitivity Equity</strong>. Is the model equally accurate at catching toxicity targeting each group?
-                </div>
-             </div>
-          </div>
-        </section>
-
-        {/* 4. Persistence & Sync */}
-        <section>
-          <h3 style={{ fontSize: '24px', fontWeight: '700', color: 'var(--primary)', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <Database size={28} />
-            4. Persistence & Local Auditing
-          </h3>
-          <p style={{ fontSize: '15px', lineHeight: 1.8, marginBottom: '16px' }}>
-            All audit logs are persisted in a local SQLite database. The <strong>Sync from Logs</strong> engine 
-            enables retroactive re-parsing of stored LLM JSON outputs to recover identity markers without new API calls.
-          </p>
         </section>
 
       </div>

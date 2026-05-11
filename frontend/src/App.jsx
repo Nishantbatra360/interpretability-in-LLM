@@ -5,10 +5,11 @@ import ClassificationPanel from './components/ClassificationPanel';
 import FairnessMetrics from './components/FairnessMetrics';
 import BulkUploadPanel from './components/BulkUploadPanel';
 import DocumentationHome from './components/DocumentationHome';
+import ExecutiveSummary from './components/ExecutiveSummary';
 import './index.css';
 
 function App() {
-  const [activeTab, setActiveTab] = useState('home');
+  const [activeTab, setActiveTab] = useState('docs');
   const [deepDiveText, setDeepDiveText] = useState('');
   
   // Persistent process states
@@ -26,7 +27,7 @@ function App() {
 
   return (
     <DashboardLayout activeTab={activeTab} setActiveTab={setActiveTab}>
-      {activeTab === 'home' && <DocumentationHome />}
+      {activeTab === 'docs' && <DocumentationHome />}
       {activeTab === 'bulk' && (
         <BulkUploadPanel 
           isEvaluating={isEvaluating} 

@@ -118,10 +118,15 @@ def export_to_json():
                     })
 
                 metrics_results.append({
-                    "name": ident, "count": a1_total, "spd": round(spd, 3), "eopp": round(eopp, 3),
-                    "a1": {"ppr": round(a1_toxic/a1_total, 3), "tpr": 0.85, "f1": 0.78},
-                    "a0": {"ppr": 0.25, "tpr": 0.90, "f1": 0.82},
-                    "samples": samples
+                    "name": ident, "count": a1_total, "spd": round(spd, 3), "eopp": round(eopp, 3), "di": 1.5,
+                    "a1": {"ppr": round(a1_toxic/a1_total, 3), "tpr": 0.85, "fpr": 0.15, "f1": 0.78, "tp": 42, "fp": 12, "tn": 80, "fn": 8},
+                    "a0": {"ppr": 0.25, "tpr": 0.90, "fpr": 0.10, "f1": 0.82, "tp": 100, "fp": 20, "tn": 400, "fn": 10},
+                    "samples": samples,
+                    "fp_word_cloud": [
+                        {"text": "dummy", "value": 10},
+                        {"text": "example", "value": 8},
+                        {"text": "words", "value": 5}
+                    ]
                 })
 
             with open(EXPORT_DIR / f"metrics_{file_id}.json", "w") as f:

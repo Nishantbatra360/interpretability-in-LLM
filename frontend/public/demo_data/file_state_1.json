@@ -1,10 +1,10 @@
 {
-  "evaluated_count": 50,
+  "evaluated_count": 35,
   "pending_count": 0,
   "stats": {
-    "toxic": 16,
-    "non_toxic": 34,
-    "total": 50,
+    "toxic": 12,
+    "non_toxic": 23,
+    "total": 35,
     "confidence_bins": [
       0,
       2,

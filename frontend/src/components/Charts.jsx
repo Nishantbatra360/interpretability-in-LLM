@@ -1,5 +1,14 @@
 import React, { useMemo } from 'react';
 
+const IDENTITY_LABELS = {
+  male: 'Male',
+  female: 'Female',
+  christian: 'Christian',
+  jewish: 'Jewish',
+  muslim: 'Muslim',
+  threat_group: 'Threat / Violence'
+};
+
 /**
  * AttributionBarChart — horizontal bar chart of token attributions.
  * Positive bars (red) = pulls toward Toxic.
@@ -188,45 +197,66 @@ const PredictionDonut = ({ comments, stats }) => {
  * ConfidenceHistogram — distribution of confidence scores in 10% buckets.
  */
 const ConfidenceHistogram = ({ comments, stats }) => {
-  const buckets = useMemo(() => {
-    if (stats?.confidence_bins) return stats.confidence_bins;
-    
-    const b = Array(10).fill(0);
+  const { bucketsToxic, bucketsNonToxic } = useMemo(() => {
+    const bt = Array(10).fill(0);
+    const bn = Array(10).fill(0);
     comments.forEach(c => {
       if (c.confidence != null) {
         const idx = Math.min(Math.floor(c.confidence * 10), 9);
-        b[idx]++;
+        if (c.predicted_classification === 'Toxic') {
+          bt[idx]++;
+        } else {
+          bn[idx]++;
+        }
       }
     });
-    return b;
-  }, [comments, stats]);
+    return { bucketsToxic: bt, bucketsNonToxic: bn };
+  }, [comments]);
 
-  const maxCount = Math.max(...buckets, 1);
+  const maxCount = Math.max(
+    ...bucketsToxic.map((v, i) => v + bucketsNonToxic[i]),
+    1
+  );
   const MAX_BAR_H = 80;
 
   return (
     <div>
-      <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--on-surface-variant)', marginBottom: '12px' }}>
-        Confidence Score Distribution
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+        <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--on-surface-variant)' }}>
+          Confidence Score Distribution
+        </div>
+        <div style={{ display: 'flex', gap: '8px', fontSize: '10px', fontWeight: 'bold' }}>
+          <span style={{ color: 'var(--toxic)' }}>■ Toxic</span>
+          <span style={{ color: 'var(--non-toxic)' }}>■ Non-Toxic</span>
+        </div>
       </div>
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: `${MAX_BAR_H + 24}px` }}>
-        {buckets.map((count, i) => {
-          const barH = (count / maxCount) * MAX_BAR_H;
-          const label = `${i * 10}–${i * 10 + 10}%`;
-          const isHigh = i >= 8;
+        {Array.from({ length: 10 }).map((_, i) => {
+          const ct = bucketsToxic[i];
+          const cn = bucketsNonToxic[i];
+          const total = ct + cn;
+          const barH = (total / maxCount) * MAX_BAR_H;
+          const toxicPct = total > 0 ? (ct / total) * 100 : 0;
+          const nonToxicPct = total > 0 ? (cn / total) * 100 : 0;
+          
           return (
             <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
               <div style={{ fontSize: '10px', color: 'var(--on-surface-variant)', marginBottom: '2px', height: '14px', lineHeight: '14px' }}>
-                {count > 0 ? count : ''}
+                {total > 0 ? total : ''}
               </div>
+              
               <div style={{
                 width: '100%', height: `${barH}px`,
-                backgroundColor: isHigh ? 'var(--primary)' : 'var(--surface-container-high)',
-                borderRadius: '3px 3px 0 0',
-                border: '1px solid var(--outline-variant)',
+                display: 'flex', flexDirection: 'column', justifyContent: 'flex-end',
                 transition: 'height 0.4s ease',
-                minHeight: count > 0 ? '2px' : '0'
-              }} />
+                minHeight: total > 0 ? '2px' : '0',
+                borderRadius: '3px 3px 0 0',
+                overflow: 'hidden'
+              }}>
+                <div style={{ width: '100%', height: `${nonToxicPct}%`, backgroundColor: 'var(--non-toxic)', opacity: 0.8 }} title={`Non-Toxic: ${cn}`} />
+                <div style={{ width: '100%', height: `${toxicPct}%`, backgroundColor: 'var(--toxic)', opacity: 0.8 }} title={`Toxic: ${ct}`} />
+              </div>
+
               <div style={{ fontSize: '9px', color: 'var(--on-surface-variant)', marginTop: '2px', textAlign: 'center' }}>
                 {i * 10}%
               </div>
@@ -247,91 +277,189 @@ const ConfidenceHistogram = ({ comments, stats }) => {
 const SPDEOppChart = ({ identities }) => {
   if (!identities || identities.length === 0) return null;
 
-  const MAX_VAL = 0.3;
-  const BAR_MAX_PX = 120;
-  const scale = (v) => Math.min(Math.abs(v) / MAX_VAL, 1) * BAR_MAX_PX;
-
-  const severityColor = (absVal) => {
+  const allVals = identities.flatMap(id => [id.spd, id.eopp]);
+  const minVal = Math.min(...allVals);
+  const maxVal = Math.max(...allVals);
+  
+  // Determine bounds
+  const hasNegative = minVal < 0;
+  const hasPositive = maxVal > 0;
+  
+  const absMax = Math.max(Math.abs(minVal), Math.abs(maxVal));
+  const MAX_VAL = Math.max(0.5, Math.ceil(absMax * 10) / 10);
+  
+  // Calculate layout parameters
+  let centerPct = 50;
+  let multiplier = 50;
+  
+  if (!hasNegative && hasPositive) {
+    centerPct = 0;
+    multiplier = 100;
+  } else if (!hasPositive && hasNegative) {
+    centerPct = 100;
+    multiplier = 100;
+  }
+  
+  const severityColor = (val) => {
+    const absVal = Math.abs(val);
     if (absVal > 0.1) return 'var(--toxic)';
     if (absVal > 0.05) return 'var(--tertiary, #e6a817)';
     return 'var(--non-toxic)';
   };
 
   return (
-    <div>
-      <div style={{ fontSize: '13px', fontWeight: '600', color: 'var(--on-surface-variant)', marginBottom: '16px' }}>
-        Disparity per Identity Group (SPD &amp; EOpp)
+    <div style={{ padding: '16px 0' }}>
+      <div style={{ display: 'flex', gap: '20px', fontSize: '12px', marginBottom: '24px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 16px', backgroundColor: 'var(--surface-container-high)', borderRadius: '20px', border: '1px solid var(--outline-variant)' }}>
+          <div style={{ width: '12px', height: '12px', borderRadius: '4px', backgroundColor: 'var(--primary)' }} />
+          <span style={{ fontWeight: 700 }}>Flagging Rate Gap</span> <span style={{ color: 'var(--on-surface-variant)' }}>(How much more often the group is flagged)</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '6px 16px', backgroundColor: 'var(--surface-container-high)', borderRadius: '20px', border: '1px solid var(--outline-variant)' }}>
+          <div style={{ width: '12px', height: '12px', borderRadius: '4px', backgroundColor: 'var(--secondary)' }} />
+          <span style={{ fontWeight: 700 }}>Recall Gap</span> <span style={{ color: 'var(--on-surface-variant)' }}>(How much better the model catches true toxicity)</span>
+        </div>
       </div>
 
-      {/* Legend */}
-      <div style={{ display: 'flex', gap: '16px', fontSize: '11px', marginBottom: '12px' }}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: 'var(--primary)', display: 'inline-block' }} />
-          SPD (Statistical Parity Difference)
-        </span>
-        <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-          <span style={{ width: '12px', height: '12px', borderRadius: '2px', backgroundColor: 'var(--secondary, #6200ea)', display: 'inline-block', opacity: 0.8 }} />
-          EOpp (Equal Opportunity Difference)
-        </span>
-      </div>
-
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-        {identities.map((row) => {
-          const spdAbs = Math.abs(row.spd);
-          const eoppAbs = Math.abs(row.eopp);
-
+      {/* Chart container */}
+      <div style={{ position: 'relative', marginTop: '30px', paddingBottom: '20px' }}>
+        {/* Fair zone band (±0.05) */}
+        {(() => {
+          const fairBandPct = (0.05 / MAX_VAL) * multiplier;
           return (
-            <div key={row.name}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
-                <span style={{ fontSize: '12px', fontWeight: '600' }}>{row.name}</span>
-              </div>
-
-              {/* SPD bar */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px' }}>
-                <div style={{ width: '42px', fontSize: '10px', color: 'var(--on-surface-variant)', textAlign: 'right', flexShrink: 0 }}>SPD</div>
-                <div style={{ flex: 1, height: '14px', backgroundColor: 'var(--surface-container)', borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
-                  <div style={{
-                    position: 'absolute', left: 0, top: 0, bottom: 0,
-                    width: `${(spdAbs / MAX_VAL) * 100}%`,
-                    maxWidth: '100%',
-                    backgroundColor: severityColor(spdAbs),
-                    borderRadius: '3px',
-                    transition: 'width 0.5s ease'
-                  }} />
-                </div>
-                <div style={{ width: '52px', fontSize: '11px', fontFamily: 'var(--font-mono)', color: severityColor(spdAbs), flexShrink: 0 }}>
-                  {row.spd >= 0 ? '+' : ''}{row.spd.toFixed(3)}
-                </div>
-              </div>
-
-              {/* EOpp bar */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <div style={{ width: '42px', fontSize: '10px', color: 'var(--on-surface-variant)', textAlign: 'right', flexShrink: 0 }}>EOpp</div>
-                <div style={{ flex: 1, height: '14px', backgroundColor: 'var(--surface-container)', borderRadius: '3px', position: 'relative', overflow: 'hidden' }}>
-                  <div style={{
-                    position: 'absolute', left: 0, top: 0, bottom: 0,
-                    width: `${(eoppAbs / MAX_VAL) * 100}%`,
-                    maxWidth: '100%',
-                    backgroundColor: severityColor(eoppAbs),
-                    borderRadius: '3px',
-                    opacity: 0.75,
-                    transition: 'width 0.5s ease'
-                  }} />
-                </div>
-                <div style={{ width: '52px', fontSize: '11px', fontFamily: 'var(--font-mono)', color: severityColor(eoppAbs), flexShrink: 0 }}>
-                  {row.eopp >= 0 ? '+' : ''}{row.eopp.toFixed(3)}
-                </div>
-              </div>
-            </div>
+            <div style={{
+              position: 'absolute',
+              left: `calc(140px + (100% - 140px) * ${(centerPct - fairBandPct) / 100})`,
+              width: `calc((100% - 140px) * ${(fairBandPct * 2) / 100})`,
+              top: '36px', bottom: '20px',
+              background: 'linear-gradient(180deg, rgba(0,108,75,0.06) 0%, rgba(0,108,75,0.03) 100%)',
+              borderLeft: '1px dashed rgba(0,108,75,0.15)',
+              borderRight: '1px dashed rgba(0,108,75,0.15)',
+              zIndex: 0, pointerEvents: 'none'
+            }} />
           );
-        })}
-      </div>
+        })()}
+        {/* Center line (0 = Fair) */}
+        <div style={{
+          position: 'absolute',
+          left: `calc(140px + (100% - 140px) * ${centerPct / 100})`,
+          top: '36px', bottom: '20px',
+          width: '0px',
+          borderLeft: '2px dashed var(--non-toxic)',
+          opacity: 0.7,
+          zIndex: 2
+        }} />
+        
+        {/* X-axis labels */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 0 16px 140px', color: 'var(--on-surface-variant)', fontSize: '11px', fontWeight: 700, position: 'relative' }}>
+          {centerPct === 50 && (
+            <>
+              <span style={{ flex: 1, textAlign: 'left' }}>-{MAX_VAL.toFixed(1)}</span>
+              <span style={{ flex: 1, textAlign: 'center', color: 'var(--non-toxic)', fontWeight: 800 }}>0 (Fair)</span>
+              <span style={{ flex: 1, textAlign: 'right' }}>+{MAX_VAL.toFixed(1)}</span>
+            </>
+          )}
+          {centerPct === 0 && (
+            <>
+              <span style={{ textAlign: 'left', color: 'var(--non-toxic)', fontWeight: 800 }}>0 (Fair)</span>
+              <span style={{ textAlign: 'right' }}>+{MAX_VAL.toFixed(1)}</span>
+            </>
+          )}
+          {centerPct === 100 && (
+            <>
+              <span style={{ textAlign: 'left' }}>-{MAX_VAL.toFixed(1)}</span>
+              <span style={{ textAlign: 'right', color: 'var(--non-toxic)', fontWeight: 800 }}>0 (Fair)</span>
+            </>
+          )}
+        </div>
 
-      {/* Threshold guide */}
-      <div style={{ marginTop: '16px', fontSize: '11px', color: 'var(--on-surface-variant)', display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-        <span style={{ color: 'var(--non-toxic)' }}>● Low |v| ≤ 0.05</span>
-        <span style={{ color: 'var(--tertiary, #e6a817)' }}>● Medium 0.05–0.10</span>
-        <span style={{ color: 'var(--toxic)' }}>● High |v| &gt; 0.10</span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px', position: 'relative', zIndex: 1 }}>
+          {identities.map((row) => {
+            const spdPct = Math.min((Math.abs(row.spd) / MAX_VAL) * multiplier, multiplier);
+            const spdLeft = row.spd < 0 ? centerPct - spdPct : centerPct;
+            
+            const eoppPct = Math.min((Math.abs(row.eopp) / MAX_VAL) * multiplier, multiplier);
+            const eoppLeft = row.eopp < 0 ? centerPct - eoppPct : centerPct;
+
+            return (
+              <div key={row.name} style={{ display: 'flex', alignItems: 'center', gap: '16px', position: 'relative' }} className="chart-row-hover">
+                <div style={{ width: '124px', fontSize: '13px', fontWeight: '700', textTransform: 'capitalize', textAlign: 'right', flexShrink: 0, color: 'var(--on-surface)' }}>
+                  {IDENTITY_LABELS[row.name] || row.name.replace(/_/g, ' ')}
+                </div>
+                
+                <div style={{ flex: 1, position: 'relative', height: '40px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '6px' }}>
+                  {/* Background track for rows */}
+                  <div style={{ position: 'absolute', left: 0, right: 0, top: '-8px', bottom: '-8px', backgroundColor: 'var(--surface-container)', borderRadius: '8px', zIndex: -1, opacity: 0.3, transition: 'opacity 0.2s ease' }} className="row-bg" />
+
+                  {/* Flagging Rate Bar */}
+                  <div style={{ position: 'relative', height: '14px', width: '100%' }}>
+                    <div style={{
+                      position: 'absolute',
+                      left: `${spdLeft}%`,
+                      width: `${spdPct}%`,
+                      height: '100%',
+                      backgroundColor: severityColor(row.spd),
+                      borderRadius: '4px',
+                      transition: 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+                      boxShadow: `0 2px 8px ${severityColor(row.spd)}40`
+                    }} />
+                    {/* Tooltip / Label */}
+                    <div style={{ 
+                      position: 'absolute',
+                      left: row.spd >= 0 ? `calc(${spdLeft + spdPct}% + 8px)` : `auto`,
+                      right: row.spd < 0 ? `calc(${100 - spdLeft}% + 8px)` : `auto`,
+                      top: '0',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      color: severityColor(row.spd),
+                      fontFamily: 'var(--font-mono)',
+                      lineHeight: '14px'
+                    }}>
+                      {row.spd >= 0 ? '+' : ''}{row.spd.toFixed(3)}
+                    </div>
+                  </div>
+
+                  {/* Recall Bar */}
+                  <div style={{ position: 'relative', height: '14px', width: '100%' }}>
+                    <div style={{
+                      position: 'absolute',
+                      left: `${eoppLeft}%`,
+                      width: `${eoppPct}%`,
+                      height: '100%',
+                      backgroundColor: severityColor(row.eopp),
+                      borderRadius: '4px',
+                      opacity: 0.85,
+                      transition: 'all 0.6s cubic-bezier(0.16, 1, 0.3, 1)',
+                      boxShadow: `0 2px 8px ${severityColor(row.eopp)}40`
+                    }} />
+                    <div style={{ 
+                      position: 'absolute',
+                      left: row.eopp >= 0 ? `calc(${eoppLeft + eoppPct}% + 8px)` : `auto`,
+                      right: row.eopp < 0 ? `calc(${100 - eoppLeft}% + 8px)` : `auto`,
+                      top: '0',
+                      fontSize: '11px',
+                      fontWeight: 800,
+                      color: severityColor(row.eopp),
+                      fontFamily: 'var(--font-mono)',
+                      lineHeight: '14px'
+                    }}>
+                      {row.eopp >= 0 ? '+' : ''}{row.eopp.toFixed(3)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      
+      {/* Threshold Guide */}
+      <div style={{ display: 'flex', gap: '16px', marginTop: '24px', padding: '16px 20px', backgroundColor: 'var(--surface-container-lowest)', borderRadius: '12px', border: '1px solid var(--outline-variant)', alignItems: 'center' }}>
+        <div style={{ fontSize: '13px', fontWeight: 800, color: 'var(--on-surface)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Severity Thresholds:</div>
+        <div style={{ display: 'flex', gap: '24px', fontSize: '13px' }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--non-toxic)', fontWeight: 700 }}><span style={{width: 10, height: 10, borderRadius: '50%', backgroundColor: 'var(--non-toxic)', boxShadow: '0 0 8px var(--non-toxic)'}}/> Fair (|v| ≤ 0.05)</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--tertiary, #e6a817)', fontWeight: 700 }}><span style={{width: 10, height: 10, borderRadius: '50%', backgroundColor: 'var(--tertiary, #e6a817)', boxShadow: '0 0 8px var(--tertiary)'}}/> Monitor (0.05 - 0.10)</span>
+          <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--toxic)', fontWeight: 700 }}><span style={{width: 10, height: 10, borderRadius: '50%', backgroundColor: 'var(--toxic)', boxShadow: '0 0 8px var(--toxic)'}}/> Biased (|v| &gt; 0.10)</span>
+        </div>
       </div>
     </div>
   );

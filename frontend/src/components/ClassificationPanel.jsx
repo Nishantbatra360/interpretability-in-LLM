@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Loader2, Play, Code, X, ShieldAlert, ShieldCheck, Sparkles } from 'lucide-react';
+import { Loader2, Play, Code, X, ShieldAlert, ShieldCheck, Sparkles, Trash2 } from 'lucide-react';
 import InterpretabilityHeatmap from './InterpretabilityHeatmap';
 import InterpretabilityPanel, { MethodologyBox, ComputedMetricsBox, TopTokenDriversBox, InterpretationSummaryBox } from './InterpretabilityPanel';
 import { AttributionBarChart } from './Charts';
@@ -17,12 +17,30 @@ const AVAILABLE_MODELS = [
 ];
 
 const ClassificationPanel = ({ initialText = '' }) => {
-  const [text, setText] = useState(initialText);
-  const [model, setModel] = useState('meta/llama-3.1-70b-instruct');
+  const [text, setText] = useState(() => {
+    if (initialText) return initialText;
+    if (!IS_DEMO) {
+      try {
+        const last = localStorage.getItem('last_evaluated_comment');
+        if (last) return last;
+      } catch (e) {}
+    }
+    return '';
+  });
+  const [model, setModel] = useState('meta/llama-3.1-8b-instruct');
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showDebug, setShowDebug] = useState(false);
+  const [history, setHistory] = useState(() => {
+    try {
+      const saved = localStorage.getItem('deep_dive_history');
+      if (saved) {
+        return JSON.parse(saved).map(item => ({ ...item, timestamp: new Date(item.timestamp) }));
+      }
+    } catch (e) { }
+    return [];
+  });
 
   // Demo Mode: Auto-load featured sample
   useEffect(() => {
@@ -95,7 +113,15 @@ const ClassificationPanel = ({ initialText = '' }) => {
     
     try {
       const response = await axios.post('http://127.0.0.1:8004/classify', { text, model });
-      setResult(response.data);
+      const newData = response.data;
+      setResult(newData);
+      setHistory(prev => {
+        const newItem = { text, result: newData, timestamp: new Date() };
+        if (prev.length > 0 && prev[0].text === text) return prev;
+        const updated = [newItem, ...prev].slice(0, 10);
+        localStorage.setItem('deep_dive_history', JSON.stringify(updated));
+        return updated;
+      });
     } catch (err) {
       console.error(err);
       setError(err.response?.data?.detail || 'An error occurred during classification.');
@@ -234,6 +260,52 @@ const ClassificationPanel = ({ initialText = '' }) => {
           </div>
         </div>
         
+        {history.length > 0 && (
+          <div className="card">
+            <div className="card-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2>Recent Deep Dives</h2>
+              <button 
+                onClick={() => { setHistory([]); localStorage.removeItem('deep_dive_history'); }}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--on-surface-variant)', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px' }}
+                title="Clear History"
+              >
+                <Trash2 size={14} /> Clear
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '300px', overflowY: 'auto', paddingRight: '4px' }}>
+              {history.map((h, i) => (
+                <div 
+                  key={i} 
+                  onClick={() => { setText(h.text); setResult(h.result); }}
+                  style={{ 
+                    padding: '12px', 
+                    borderRadius: '8px', 
+                    backgroundColor: 'var(--surface-container-low)', 
+                    cursor: 'pointer',
+                    border: '1px solid var(--outline-variant)',
+                    borderLeft: `4px solid ${h.result?.classification === 'Toxic' ? 'var(--toxic)' : 'var(--non-toxic)'}`,
+                    transition: 'background-color 0.2s'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--surface-container-high)'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = 'var(--surface-container-low)'}
+                >
+                  <div style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginBottom: '4px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <strong style={{ color: h.result?.classification === 'Toxic' ? 'var(--toxic)' : 'var(--non-toxic)' }}>
+                        {h.result?.classification || 'Unknown'}
+                    </strong>
+                    <span style={{ fontSize: '10px' }}>
+                        {h.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--on-surface)', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                    "{h.text}"
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <MethodologyBox />
       </div>
 
