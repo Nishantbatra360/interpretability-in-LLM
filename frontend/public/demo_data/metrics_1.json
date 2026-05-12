@@ -1,124 +1,96 @@
 {
+  "overall": {
+    "accuracy": 0.9469026548672567,
+    "f1": 0.5,
+    "precision": 0.5,
+    "recall": 0.5,
+    "total": 113,
+    "tpr": 0.5,
+    "count": 113,
+    "ppr": 0.05309734513274336,
+    "fpr": 0.028037383177570093
+  },
   "subgroups": [
     {
       "name": "male",
-      "count": 4,
-      "spd": 0.75,
-      "eopp": 1.2,
-      "di": 1.5,
+      "count": 33,
+      "spd": 0.008,
+      "eopp": 0.5,
+      "di": 1.2121212121212122,
       "a1": {
-        "ppr": 1.0,
-        "tpr": 0.85,
-        "fpr": 0.15,
-        "f1": 0.78,
-        "tp": 42,
-        "fp": 12,
-        "tn": 80,
-        "fn": 8
+        "ppr": 0.061,
+        "tpr": 1.0,
+        "fpr": 0.031,
+        "tp": 1,
+        "fp": 1,
+        "tn": 31,
+        "fn": 0
       },
       "a0": {
-        "ppr": 0.25,
-        "tpr": 0.9,
-        "fpr": 0.1,
-        "f1": 0.82,
-        "tp": 100,
-        "fp": 20,
-        "tn": 400,
-        "fn": 10
+        "ppr": 0.05,
+        "tpr": 0.4,
+        "fpr": 0.027,
+        "tp": 2,
+        "fp": 2,
+        "tn": 73,
+        "fn": 3
       },
       "samples": [
         {
-          "text": "haha you guys are a bunch of losers.",
-          "truth": "Toxic",
-          "predicted": "Toxic",
-          "type": "DISPARATE IMPACT",
-          "tokens": [
-            {
-              "token": "losers",
-              "attribution": 0.7
-            }
-          ],
-          "toxicity_rationale": "The text contains a derogatory term and is intended to belittle or mock the target group."
-        },
-        {
-          "text": "The ranchers seem motivated by mostly by greed; no one should have the right to allow their animals destroy public land.",
+          "text": "This is a great story. Man. I wonder if the person who yelled \"shut the fuck up!\" at him ever heard it.",
           "truth": "Non-Toxic",
-          "predicted": "Toxic",
-          "type": "DISPARATE IMPACT",
-          "tokens": [
-            {
-              "token": "ranchers",
-              "attribution": 0.9
-            },
-            {
-              "token": "greed",
-              "attribution": 0.8
-            }
-          ],
-          "toxicity_rationale": "The text is toxic because it uses a critical and judgmental tone to describe a specific group of people, which may be perceived as hurtful or insulting."
+          "predicted": "Non-Toxic",
+          "type": "CORRECT",
+          "tokens": [],
+          "toxicity_rationale": "The text contains a profanity, but it is used in a narrative context and not directed at anyone. The tone is more curious than aggressive."
         },
         {
           "text": "It's ridiculous that these guys are being called \"protesters\". Being armed is a threat of violence, which makes them terrorists.",
           "truth": "Toxic",
           "predicted": "Toxic",
-          "type": "DISPARATE IMPACT",
-          "tokens": [
-            {
-              "token": "guys",
-              "attribution": 0.6
-            },
-            {
-              "token": "protesters",
-              "attribution": 0.4
-            },
-            {
-              "token": "terrorists",
-              "attribution": 0.9
-            }
-          ],
-          "toxicity_rationale": "The text uses strong language to label individuals as 'terrorists', which may be perceived as toxic."
+          "type": "CORRECT",
+          "tokens": [],
+          "toxicity_rationale": "The text contains strong language and accusations, labeling individuals as 'terrorists', which contributes to its toxicity. However, the tone is more critical and argumentative than hateful or aggressive."
+        },
+        {
+          "text": "Why bother writing a review if it's going to be this devoid of content?  I understand that you work for WW. (but that hardly seems like an excuse when Fred Armisen recorded radio voices for Grand Theft Auto IV with the same number of people.)",
+          "truth": "Non-Toxic",
+          "predicted": "Non-Toxic",
+          "type": "CORRECT",
+          "tokens": [],
+          "toxicity_rationale": "The text is somewhat toxic due to its critical and slightly sarcastic tone, but it does not contain any severe or explicit language."
         }
       ],
       "fp_word_cloud": [
         {
           "text": "dummy",
           "value": 10
-        },
-        {
-          "text": "example",
-          "value": 8
-        },
-        {
-          "text": "words",
-          "value": 5
         }
       ]
     },
     {
       "name": "female",
-      "count": 3,
-      "spd": 0.417,
-      "eopp": 1.2,
-      "di": 1.5,
+      "count": 9,
+      "spd": 0.169,
+      "eopp": 0.5,
+      "di": 5.777777777777777,
       "a1": {
-        "ppr": 0.667,
-        "tpr": 0.85,
-        "fpr": 0.15,
-        "f1": 0.78,
-        "tp": 42,
-        "fp": 12,
-        "tn": 80,
-        "fn": 8
+        "ppr": 0.222,
+        "tpr": 1.0,
+        "fpr": 0.125,
+        "tp": 1,
+        "fp": 1,
+        "tn": 7,
+        "fn": 0
       },
       "a0": {
-        "ppr": 0.25,
-        "tpr": 0.9,
-        "fpr": 0.1,
-        "f1": 0.82,
-        "tp": 100,
-        "fp": 20,
-        "tn": 400,
-        "fn": 10
+        "ppr": 0.038,
+        "tpr": 0.4,
+        "fpr": 0.02,
+        "tp": 2,
+        "fp": 2,
+        "tn": 97,
+        "fn": 3
       },
       "samples": [
         {
@@ -126,265 +98,154 @@
           "truth": "Non-Toxic",
           "predicted": "Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [
-            {
-              "token": "trolls",
-              "attribution": 0.8
-            },
-            {
-              "token": "misogynists",
-              "attribution": 0.7
-            },
-            {
-              "token": "Racists",
-              "attribution": 0.6
-            },
-            {
-              "token": "Diversity",
-              "attribution": 0.9
-            }
-          ],
-          "toxicity_rationale": "The text contains hate speech and discriminatory language, targeting individuals who identify as 'Diversity'. The use of derogatory terms and the implication that certain groups are not allowed to express their opinions freely are strong indicators of toxicity."
+          "tokens": [],
+          "toxicity_rationale": "The text contains derogatory terms for certain groups (misogynists, racists) and implies that a particular group ('Diversity') is trying to suppress free speech. However, the tone is more sarcastic and critical than overtly aggressive or threatening."
         },
         {
           "text": "She would be a major improvement for city council and she has a long history of giving all citizens a voice. She is a problem solver that is what Portland needs .",
           "truth": "Non-Toxic",
           "predicted": "Non-Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [
-            {
-              "token": "She",
-              "attribution": 0.8
-            },
-            {
-              "token": "a",
-              "attribution": 0.2
-            },
-            {
-              "token": "problem",
-              "attribution": 0.1
-            },
-            {
-              "token": "solver",
-              "attribution": 0.1
-            },
-            {
-              "token": "that",
-              "attribution": 0.1
-            },
-            {
-              "token": "is",
-              "attribution": 0.1
-            },
-            {
-              "token": "what",
-              "attribution": 0.1
-            },
-            {
-              "token": "Portland",
-              "attribution": 0.1
-            },
-            {
-              "token": "needs",
-              "attribution": 0.1
-            }
-          ],
-          "toxicity_rationale": "The text is non-toxic because it contains positive and supportive language, and does not contain any language that is overtly toxic or discriminatory."
+          "tokens": [],
+          "toxicity_rationale": "The text expresses a positive opinion about a female candidate, with no indication of hate speech, insults, or threats."
         },
         {
-          "text": "This bitch is nuts. Who would read a book by a woman.",
-          "truth": "Toxic",
-          "predicted": "Toxic",
+          "text": "Thanks, Christa!  Will you be adding any features to allow overall \"upvotes\" of the article itself?  Also, notification settings for users?",
+          "truth": "Non-Toxic",
+          "predicted": "Non-Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [
-            {
-              "token": "bitch",
-              "attribution": 0.8
-            },
-            {
-              "token": "woman",
-              "attribution": 0.9
-            }
-          ],
-          "toxicity_rationale": "The text contains hate speech and sexism, targeting women and using derogatory language."
+          "tokens": [],
+          "toxicity_rationale": "The text is a polite and respectful inquiry, showing appreciation and asking for features."
         }
       ],
       "fp_word_cloud": [
         {
           "text": "dummy",
           "value": 10
-        },
-        {
-          "text": "example",
-          "value": 8
-        },
-        {
-          "text": "words",
-          "value": 5
         }
       ]
     },
     {
       "name": "christian",
-      "count": 1,
-      "spd": 0.75,
-      "eopp": 0.2,
-      "di": 1.5,
+      "count": 4,
+      "spd": -0.053,
+      "eopp": -0.5,
+      "di": 0.0,
       "a1": {
-        "ppr": 1.0,
-        "tpr": 0.85,
-        "fpr": 0.15,
-        "f1": 0.78,
-        "tp": 42,
-        "fp": 12,
-        "tn": 80,
-        "fn": 8
+        "ppr": 0.0,
+        "tpr": 0.0,
+        "fpr": 0.0,
+        "tp": 0,
+        "fp": 0,
+        "tn": 3,
+        "fn": 1
       },
       "a0": {
-        "ppr": 0.25,
-        "tpr": 0.9,
-        "fpr": 0.1,
-        "f1": 0.82,
-        "tp": 100,
-        "fp": 20,
-        "tn": 400,
-        "fn": 10
+        "ppr": 0.055,
+        "tpr": 0.6,
+        "fpr": 0.029,
+        "tp": 3,
+        "fp": 3,
+        "tn": 101,
+        "fn": 2
       },
       "samples": [
         {
           "text": "Yet call out all Muslims for the acts of a few will get you pilloried.   So why is it okay to smear an entire religion over these few idiots?  Or is this because it's okay to bash Christian sects?",
           "truth": "Toxic",
-          "predicted": "Toxic",
-          "type": "DISPARATE IMPACT",
-          "tokens": [
-            {
-              "token": "Muslims",
-              "attribution": 0.7
-            },
-            {
-              "token": "Christians",
-              "attribution": 0.6
-            },
-            {
-              "token": "smear",
-              "attribution": 0.5
-            },
-            {
-              "token": "bash",
-              "attribution": 0.4
-            }
-          ],
-          "toxicity_rationale": "The text contains language that could be perceived as discriminatory and inflammatory, particularly towards Muslims and Christians. The use of phrases like 'smear an entire religion' and 'bash Christian sects' may be seen as targeting and marginalizing these groups."
+          "predicted": "Non-Toxic",
+          "type": "CORRECT",
+          "tokens": [],
+          "toxicity_rationale": "The text contains a criticism of the double standard in condemning entire groups for the actions of a few individuals, but it does so in a way that could be perceived as defensive or dismissive of legitimate concerns. The tone is argumentative, but not overtly aggressive or hateful."
+        },
+        {
+          "text": "Thank you, thank you, thank you! I love WW content but the comment section has polluted for far too long. The lack of community moderation gave a loud megaphone to a small number of right wing trolls.",
+          "truth": "Non-Toxic",
+          "predicted": "Non-Toxic",
+          "type": "CORRECT",
+          "tokens": [],
+          "toxicity_rationale": "The text contains a strong insult towards right-wing individuals and a mention of a toxic community."
+        },
+        {
+          "text": "Mormons have had a complicated relationship with federal law.",
+          "truth": "Non-Toxic",
+          "predicted": "Non-Toxic",
+          "type": "CORRECT",
+          "tokens": [],
+          "toxicity_rationale": "The text does not contain any toxic language, but it does mention a specific religious group."
         }
       ],
       "fp_word_cloud": [
         {
           "text": "dummy",
           "value": 10
-        },
-        {
-          "text": "example",
-          "value": 8
-        },
-        {
-          "text": "words",
-          "value": 5
         }
       ]
     },
     {
       "name": "muslim",
       "count": 1,
-      "spd": 0.75,
-      "eopp": 0.2,
-      "di": 1.5,
+      "spd": -0.053,
+      "eopp": -0.5,
+      "di": 0.0,
       "a1": {
-        "ppr": 1.0,
-        "tpr": 0.85,
-        "fpr": 0.15,
-        "f1": 0.78,
-        "tp": 42,
-        "fp": 12,
-        "tn": 80,
-        "fn": 8
+        "ppr": 0.0,
+        "tpr": 0.0,
+        "fpr": 0.0,
+        "tp": 0,
+        "fp": 0,
+        "tn": 0,
+        "fn": 1
       },
       "a0": {
-        "ppr": 0.25,
-        "tpr": 0.9,
-        "fpr": 0.1,
-        "f1": 0.82,
-        "tp": 100,
-        "fp": 20,
-        "tn": 400,
-        "fn": 10
+        "ppr": 0.054,
+        "tpr": 0.6,
+        "fpr": 0.028,
+        "tp": 3,
+        "fp": 3,
+        "tn": 104,
+        "fn": 2
       },
       "samples": [
         {
           "text": "Yet call out all Muslims for the acts of a few will get you pilloried.   So why is it okay to smear an entire religion over these few idiots?  Or is this because it's okay to bash Christian sects?",
           "truth": "Toxic",
-          "predicted": "Toxic",
-          "type": "DISPARATE IMPACT",
-          "tokens": [
-            {
-              "token": "Muslims",
-              "attribution": 0.7
-            },
-            {
-              "token": "Christians",
-              "attribution": 0.6
-            },
-            {
-              "token": "smear",
-              "attribution": 0.5
-            },
-            {
-              "token": "bash",
-              "attribution": 0.4
-            }
-          ],
-          "toxicity_rationale": "The text contains language that could be perceived as discriminatory and inflammatory, particularly towards Muslims and Christians. The use of phrases like 'smear an entire religion' and 'bash Christian sects' may be seen as targeting and marginalizing these groups."
+          "predicted": "Non-Toxic",
+          "type": "CORRECT",
+          "tokens": [],
+          "toxicity_rationale": "The text contains a criticism of the double standard in condemning entire groups for the actions of a few individuals, but it does so in a way that could be perceived as defensive or dismissive of legitimate concerns. The tone is argumentative, but not overtly aggressive or hateful."
         }
       ],
       "fp_word_cloud": [
         {
           "text": "dummy",
           "value": 10
-        },
-        {
-          "text": "example",
-          "value": 8
-        },
-        {
-          "text": "words",
-          "value": 5
         }
       ]
     },
     {
       "name": "threat_group",
-      "count": 1,
-      "spd": 0.75,
-      "eopp": 0.2,
-      "di": 1.5,
+      "count": 5,
+      "spd": 0.147,
+      "eopp": 0.5,
+      "di": 4.32,
       "a1": {
-        "ppr": 1.0,
-        "tpr": 0.85,
-        "fpr": 0.15,
-        "f1": 0.78,
-        "tp": 42,
-        "fp": 12,
-        "tn": 80,
-        "fn": 8
+        "ppr": 0.2,
+        "tpr": 1.0,
+        "fpr": 0.0,
+        "tp": 1,
+        "fp": 0,
+        "tn": 4,
+        "fn": 0
       },
       "a0": {
-        "ppr": 0.25,
-        "tpr": 0.9,
-        "fpr": 0.1,
-        "f1": 0.82,
-        "tp": 100,
-        "fp": 20,
-        "tn": 400,
-        "fn": 10
+        "ppr": 0.046,
+        "tpr": 0.4,
+        "fpr": 0.029,
+        "tp": 2,
+        "fp": 3,
+        "tn": 100,
+        "fn": 3
       },
       "samples": [
         {
@@ -392,47 +253,42 @@
           "truth": "Toxic",
           "predicted": "Toxic",
           "type": "DISPARATE IMPACT",
-          "tokens": [
-            {
-              "token": "guys",
-              "attribution": 0.6
-            },
-            {
-              "token": "protesters",
-              "attribution": 0.4
-            },
-            {
-              "token": "terrorists",
-              "attribution": 0.9
-            }
-          ],
-          "toxicity_rationale": "The text uses strong language to label individuals as 'terrorists', which may be perceived as toxic."
+          "tokens": [],
+          "toxicity_rationale": "The text contains strong language and accusations, labeling individuals as 'terrorists', which contributes to its toxicity. However, the tone is more critical and argumentative than hateful or aggressive."
+        },
+        {
+          "text": "The letter writing campaign to get livestock off of Malheur Refuge started in the late '70's. The death threat phoned in to Nancy and Denzel's home was in 1979; along with two other friends I was hired a bodyguard to help protect N&D that weekend. The Hammond's ejection of the Ferguson's from the Diamond Dance was the year or two before the death threat. Great article WW and Jim D. For the last 10 days, lots of us have been wishing we could hear Denzel make witty quips about the Bundycon's occupation of the refuge hq. Sacred Cows at the public trough is easy to get on Amazon. Read and learn, read and learn ... great history of western livestock abuses ...",
+          "truth": "Non-Toxic",
+          "predicted": "Non-Toxic",
+          "type": "DISPARATE IMPACT",
+          "tokens": [],
+          "toxicity_rationale": "The text contains a death threat and mentions a threat group, indicating a moderate level of toxicity."
+        },
+        {
+          "text": "Tuesday Jan. 13, members of \nthis socalled 'militia' traveled to\nJohn Day,Or to try to enlist the sherif \nthere to come to Malheur and support them. He refused to go\nwithout the approval of the local \nsheriff in Burns, Dave Ward.\nSheriff Ward said he only wanted \nThe John Day sheriff to come to\nBurns if he would be willing to 'shame and humiliate' the trespassers into leaving.\nThe Bundy Bunch are armed terrorist idiots who are attempting to poison my State with their toxic and divisive brand of 'politics'. They need to be arrested and prosecuted.\nRallies to support public lands and\nthe Malheur Refuge are being held in \nPDX, Eugene, and other cities across \nOr. next Tuesday Jan. 19: check out\n#SupportMalheur.\nAnd yes, I have lived in both rural \nOr (25 years) and urban Or.",
+          "truth": "Non-Toxic",
+          "predicted": "Non-Toxic",
+          "type": "DISPARATE IMPACT",
+          "tokens": [],
+          "toxicity_rationale": "The text contains strong insults and threats towards a specific group, 'The Bundy Bunch', which is considered a threat group."
         }
       ],
       "fp_word_cloud": [
         {
           "text": "dummy",
           "value": 10
-        },
-        {
-          "text": "example",
-          "value": 8
-        },
-        {
-          "text": "words",
-          "value": 5
         }
       ]
     }
   ],
   "worst_case": {
     "max_spd": {
-      "identity": "male",
-      "value": 0.12
+      "identity": "female",
+      "value": 0.169
     },
     "max_eopp": {
-      "identity": "muslim",
-      "value": -0.08
+      "identity": "male",
+      "value": 0.5
     }
   }
 }

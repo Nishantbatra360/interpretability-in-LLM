@@ -22,10 +22,11 @@ const ClassificationPanel = ({ initialText = '' }) => {
     if (!IS_DEMO) {
       try {
         const last = localStorage.getItem('last_evaluated_comment');
-        if (last) return last;
+        const oldDefault = "This is so cool. It's like, 'would you want your mother to read this??' Really great idea, well done!";
+        if (last && last !== oldDefault) return last;
       } catch (e) {}
     }
-    return '';
+    return 'You are a good person with bad choices';
   });
   const [model, setModel] = useState('meta/llama-3.1-8b-instruct');
   const [result, setResult] = useState(null);

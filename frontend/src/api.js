@@ -21,7 +21,7 @@ const api = {
   getEvaluatedComments: async (id, skip = 0, limit = 100, search = '', classification = '', sortBy = '') => {
     if (IS_DEMO) {
       try {
-        const res = await axios.get(`${PUBLIC_BASE}demo_data/evaluated_${id}.json`);
+        const res = await axios.get(`${PUBLIC_BASE}demo_data/evaluated_comments_${id}.json`);
         let allComments = res.data;
         
         if (classification) {

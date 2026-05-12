@@ -131,37 +131,36 @@ export const Section = ({ title, defaultOpen = true, children }) => {
    Methodology Box component (Static)
 ───────────────────────────────────────────────────────── */
 export const MethodologyBox = () => (
-  <Section title="📐 Interpretability Methodology (Proxy vs. Reference Plan)" defaultOpen={true}>
+  <Section title="📐 Interpretability Methodology (GTAP Approach)" defaultOpen={true}>
     <div style={{ fontSize: '13px', color: 'var(--on-surface-variant)', lineHeight: 1.6, marginBottom: '12px', padding: '12px', backgroundColor: 'rgba(59, 130, 246, 0.05)', borderRadius: '6px', borderLeft: '4px solid var(--primary)' }}>
-      <strong>Implementation Note:</strong> The overall <em>Zero-Shot Classification</em> verdict and confidence are now computed mathematically using exact <code>log p(toxic|x) − log p(non-toxic|x)</code> probability logs extracted directly from the NVIDIA API, perfectly matching the Reference Plan.<br/><br/>
-      However, because true <em>Integrated Gradients (IG)</em> require white-box access to the model's backward pass, the token-level heatmap below employs a <strong>Generative Token Attribution Proxy</strong>. The LLM is prompted to auto-regressively predict the attribution score for each token to simulate the causal reasoning.
+      <strong>Generative Token Attribution Proxy (GTAP):</strong> Because true <em>Integrated Gradients</em> require white-box access to the model weights, this system uses a high-resolution generative proxy. The LLM is prompted to perform a self-audit by assigning independent <code>toxic</code> and <code>safe</code> scores to every token based on its internal causal reasoning path.
     </div>
     <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
       <Formula
-        label="Core Attribution Formula (per token t)"
-        formula="S(t) = log P(Toxic | t, x) − log P(Non-Toxic | t, x)"
-        description="S(t) > 0: token pushes prediction Toxic. S(t) < 0: token pushes Non-Toxic. S(t) ≈ 0: neutral."
+        label="Token Attribution Score (S(t))"
+        formula="S(t) = toxic_score(t) − safe_score(t)"
+        description="Calculated per-token. S(t) > 0 indicates a toxic driver; S(t) < 0 indicates a mitigating safety signal."
       />
       <Formula
-        label="Composite Toxicity Score"
-        formula="ToxicityScore = Σ max(S(t), 0) / n"
-        description="Average positive attribution — how much toxic signal is present."
+        label="Aggregate Toxicity Signal"
+        formula="ToxicitySignal = Σ max(S(t), 0) / n"
+        description="The average 'toxic weight' per token across the entire comment."
       />
       <Formula
-        label="Composite Safety Score"
-        formula="SafetyScore = Σ max(−S(t), 0) / n"
-        description="Average negative attribution — how much non-toxic signal is present."
+        label="Aggregate Safety Signal"
+        formula="SafetySignal = Σ max(−S(t), 0) / n"
+        description="The average 'mitigating weight' per token. Represents context that reduces toxicity."
       />
       <Formula
         label="Net Logit Bias (Decision Signal)"
-        formula="Δlogit = ToxicityScore − SafetyScore"
-        description="If Δlogit > 0 → Toxic. If Δlogit < 0 → Non-Toxic."
+        formula="Δlogit = ToxicitySignal − SafetySignal"
+        description="The final vector sum of all token-level signals. If Δlogit > 0 → Pushes Toxic."
         highlight
       />
       <Formula
-        label="Attribution Entropy (Signal Focus)"
-        formula="H = −Σ [|S(t)|/ΣS * log₂(|S(t)|/ΣS)]"
-        description="Low entropy = model focused on a few decisive words. High = diffuse, uncertain signal."
+        label="Signal Focus (1 - Entropy)"
+        formula="Focus = 1 − [−Σ p(t) * log₂(p(t)) / log₂(n)]"
+        description="Measures how concentrated the attribution is. 1.0 = single word decision; 0.0 = entire text is equally responsible."
       />
     </div>
   </Section>

@@ -139,24 +139,24 @@ const SubgroupCard = ({ group, isExpanded, onToggle }) => {
                             <div style={{ fontSize: '11px', fontWeight: '800', color: 'var(--primary)', marginBottom: '8px', letterSpacing: '0.05em' }}>
                                 <Tooltip label="FLAGGED AS TOXIC" detail="Percentage of ALL comments mentioning this group that the model flagged as toxic." />
                             </div>
-                            <div style={{ fontSize: '24px', fontWeight: '900' }}>{pct(group.a1.ppr)}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginTop: '4px' }}>vs <strong>{pct(group.a0.ppr)}</strong> for other groups</div>
+                            <div style={{ fontSize: '24px', fontWeight: '900' }}>{pct(group.a1?.ppr || 0)}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginTop: '4px' }}>vs <strong>{pct(group.a0?.ppr || 0)}</strong> for other groups</div>
                             <div style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginTop: '8px', fontStyle: 'italic' }}>How often comments mentioning this are rejected.</div>
                         </div>
                         <div style={{ padding: '16px', borderRadius: '8px', backgroundColor: 'var(--surface-container-low)', border: '1px solid var(--outline-variant)' }}>
                             <div style={{ fontSize: '11px', fontWeight: '800', color: 'var(--secondary)', marginBottom: '8px', letterSpacing: '0.05em' }}>
                                 <Tooltip label="FALSE POSITIVE RATE" detail="Percentage of SAFE comments mentioning this group that the model incorrectly flagged as toxic." />
                             </div>
-                            <div style={{ fontSize: '24px', fontWeight: '900', color: group.a1.fpr > group.a0.fpr + 0.05 ? 'var(--toxic)' : 'var(--on-surface)' }}>{pct(group.a1.fpr)}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginTop: '4px' }}>vs <strong>{pct(group.a0.fpr)}</strong> for other groups</div>
+                            <div style={{ fontSize: '24px', fontWeight: '900', color: (group.a1?.fpr || 0) > (group.a0?.fpr || 0) + 0.05 ? 'var(--toxic)' : 'var(--on-surface)' }}>{pct(group.a1?.fpr || 0)}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginTop: '4px' }}>vs <strong>{pct(group.a0?.fpr || 0)}</strong> for other groups</div>
                             <div style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginTop: '8px', fontStyle: 'italic' }}>Safe comments incorrectly flagged as toxic.</div>
                         </div>
                         <div style={{ padding: '16px', borderRadius: '8px', backgroundColor: 'var(--surface-container-low)', border: '1px solid var(--outline-variant)' }}>
                             <div style={{ fontSize: '11px', fontWeight: '800', color: 'var(--tertiary)', marginBottom: '8px', letterSpacing: '0.05em' }}>
                                 <Tooltip label="CAUGHT TOXICITY (RECALL)" detail="Percentage of TRULY TOXIC comments mentioning this group that the model successfully caught." />
                             </div>
-                            <div style={{ fontSize: '24px', fontWeight: '900' }}>{pct(group.a1.tpr)}</div>
-                            <div style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginTop: '4px' }}>vs <strong>{pct(group.a0.tpr)}</strong> for other groups</div>
+                            <div style={{ fontSize: '24px', fontWeight: '900' }}>{pct(group.a1?.tpr || 0)}</div>
+                            <div style={{ fontSize: '12px', color: 'var(--on-surface-variant)', marginTop: '4px' }}>vs <strong>{pct(group.a0?.tpr || 0)}</strong> for other groups</div>
                             <div style={{ fontSize: '11px', color: 'var(--on-surface-variant)', marginTop: '8px', fontStyle: 'italic' }}>How well the model finds actual toxicity here.</div>
                         </div>
                     </div>
@@ -314,10 +314,10 @@ const FairnessMetrics = () => {
     
     rows.push([
       "Overall (Average)",
-      metrics.overall.n,
-      (metrics.overall.ppr * 100).toFixed(1),
-      (metrics.overall.fpr * 100).toFixed(1),
-      (metrics.overall.tpr * 100).toFixed(1),
+      metrics.overall?.total || 0,
+      (metrics.overall?.ppr ? metrics.overall.ppr * 100 : 0).toFixed(1),
+      (metrics.overall?.fpr ? metrics.overall.fpr * 100 : 0).toFixed(1),
+      (metrics.overall?.tpr ? metrics.overall.tpr * 100 : 0).toFixed(1),
       "0",
       "0"
     ]);
@@ -442,25 +442,25 @@ const FairnessMetrics = () => {
                 <div style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--on-surface-variant)', fontWeight: '700' }}>
                   <Tooltip label="Accuracy" detail="Percentage of total predictions that were correct (both toxic and safe). Formula: (TP + TN) / Total." />
                 </div>
-                <div style={{ fontSize: '28px', fontWeight: '900', color: 'var(--primary)' }}>{pct(metrics.overall.accuracy)}</div>
+                <div style={{ fontSize: '28px', fontWeight: '900', color: 'var(--primary)' }}>{pct(metrics.overall?.accuracy || 0)}</div>
               </div>
               <div>
                 <div style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--on-surface-variant)', fontWeight: '700' }}>
                   <Tooltip label="F1 Score" detail="Harmonic mean of precision and recall. Best for imbalanced datasets as it balances false positives and false negatives." />
                 </div>
-                <div style={{ fontSize: '28px', fontWeight: '900', color: 'var(--on-surface)' }}>{metrics.overall.f1.toFixed(3)}</div>
+                <div style={{ fontSize: '28px', fontWeight: '900', color: 'var(--on-surface)' }}>{(metrics.overall?.f1 || 0).toFixed(3)}</div>
               </div>
               <div>
                 <div style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--on-surface-variant)', fontWeight: '700' }}>
                   <Tooltip label="Precision" detail="How many of the comments flagged as 'Toxic' were actually toxic. Formula: TP / (TP + FP)." />
                 </div>
-                <div style={{ fontSize: '28px', fontWeight: '900', color: 'var(--on-surface)' }}>{pct(metrics.overall.precision)}</div>
+                <div style={{ fontSize: '28px', fontWeight: '900', color: 'var(--on-surface)' }}>{pct(metrics.overall?.precision || 0)}</div>
               </div>
               <div>
                 <div style={{ fontSize: '12px', textTransform: 'uppercase', color: 'var(--on-surface-variant)', fontWeight: '700' }}>
                   <Tooltip label="Recall (TPR)" detail="What percentage of truly toxic comments the model successfully identified. Formula: TP / (TP + FN)." />
                 </div>
-                <div style={{ fontSize: '28px', fontWeight: '900', color: 'var(--on-surface)' }}>{pct(metrics.overall.tpr)}</div>
+                <div style={{ fontSize: '28px', fontWeight: '900', color: 'var(--on-surface)' }}>{pct(metrics.overall?.tpr || 0)}</div>
               </div>
             </div>
           </div>

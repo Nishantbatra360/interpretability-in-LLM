@@ -127,11 +127,21 @@ async def upload_csv(file: UploadFile = File(...), db: Session = Depends(get_db)
                     break
                 except: pass
 
+        # Extract Ground Truth Sub-Types if available
+        sub_types = {}
+        for col in ['severe_toxicity', 'obscene', 'threat', 'insult', 'identity_attack', 'sexual_explicit']:
+            if col in df.columns:
+                try:
+                    val = row[col]
+                    sub_types[col] = float(val) if not pd.isna(val) else 0.0
+                except: sub_types[col] = 0.0
+
         evaluation = CommentEvaluation(
             file_id=uploaded_file.id,
             text=str(text_val).strip(),
             target=target_val,
-            status="pending"
+            status="pending",
+            **sub_types
         )
         db.add(evaluation)
         inserted_count += 1
@@ -336,9 +346,13 @@ Output STRICTLY valid JSON:
   "log_prob_toxic": -2.5,
   "log_prob_nontoxic": -0.1,
   "detections": {{ "male": 0, "female": 0, "christian": 0, "jewish": 0, "muslim": 0, "threat_group": 0 }},
+  "sub_types": {{ "severe": 0.0, "obscene": 0.0, "threat": 0.0, "insult": 0.0, "identity_attack": 0.0, "sexual_explicit": 0.0 }},
   "toxicity_rationale": "Brief reason.",
   "identity_rationale": "Brief reason."
 }}
+
+Note: For sub_types, provide a probability score between 0.0 and 1.0 for each category.
+"threat_group" in detections refers to groups targeted with threats of violence.
 
 Text: "{text}"
 """
@@ -379,6 +393,7 @@ Text: "{text}"
                     "detections": full_det, 
                     "toxicity_rationale": data.get("toxicity_rationale", ""), 
                     "identity_rationale": data.get("identity_rationale", ""),
+                    "sub_types": data.get("sub_types", {}),
                     "tokens": [],  # Zero-shot does NOT produce token attribution
                     # Store raw values for formula display
                     "log_prob_toxic": round(log_prob_toxic, 4),
@@ -450,6 +465,15 @@ async def stream_evaluate(file_id: int, batch_size: int = 10, model: str = "meta
                             for ident, val in res.get("detections", {}).items():
                                 if hasattr(c, ident):
                                     setattr(c, ident, float(val))
+                            
+                            # Save Predicted Sub-Types
+                            st = res.get("sub_types", {})
+                            c.severe_toxicity = float(st.get("severe", 0.0))
+                            c.obscene = float(st.get("obscene", 0.0))
+                            c.threat = float(st.get("threat", 0.0))
+                            c.insult = float(st.get("insult", 0.0))
+                            c.identity_attack = float(st.get("identity_attack", 0.0))
+                            c.sexual_explicit = float(st.get("sexual_explicit", 0.0))
                             
                             c.tokens_json = json.dumps({
                                 "toxicity_rationale": res["toxicity_rationale"], 
